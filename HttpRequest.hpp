@@ -1,19 +1,16 @@
 #pragma once
 
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <map>
+#include "common.h"
 
-class Request {
+class HttpRequest {
 private:
     std::string method, url, version, body;
     std::map<std::string, std::string> headers;
 
 public:
-    Request();
-    Request(const std::string &request);
-    ~Request();
+    HttpRequest();
+    HttpRequest(const std::string &request);
+    ~HttpRequest();
 
     std::string getMethod() const { return method; }
     std::string getUrl() const { return url; }

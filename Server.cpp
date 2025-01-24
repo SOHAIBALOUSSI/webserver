@@ -1,5 +1,5 @@
 #include "Server.hpp"
-#include "Request.hpp"
+#include "HttpRequest.hpp"
 
 Server::Server(std::string host, int port)
 {
@@ -27,7 +27,7 @@ void Server::setupServer()
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(server_fd, (sockaddr *)&server_addr, sizeof(server_addr)) == -1)
         throw std::runtime_error("Binding failed");
-    listen(server_fd, 10);
+    listen(server_fd, SOMAXCONN);
 }
 
 void Server::handleConnections()
@@ -35,7 +35,7 @@ void Server::handleConnections()
     struct pollfd fds[client_fds.size() + 1];
     fds[0].fd = server_fd;
     fds[0].events = POLLIN;
-    for (size_t i = 0; i < client_fds.size(); i++)
+    for (size_t i = 0; i < client_fds.size(); ++i)
     {
         fds[i + 1].fd = client_fds[i];
         fds[i + 1].events = POLLIN | POLLOUT;
@@ -45,10 +45,10 @@ void Server::handleConnections()
         throw std::runtime_error("Poll failed");
     if (fds[0].revents & POLLIN)
         acceptConnection();
-    for (size_t i = 0; i < client_fds.size(); i++)
+    for (size_t i = 0; i < client_fds.size(); ++i)
     {
         if (fds[i + 1].revents & POLLIN)
-            handleRequest(client_fds[i]);
+            handleHttpRequest(client_fds[i]);
     }
 }
 
@@ -74,7 +74,7 @@ void Server::closeConnection(int client_fd)
     }
 }
 
-void Server::handleRequest(int client_fd)
+void Server::handleHttpRequest(int client_fd)
 {
     int flags = fcntl(client_fd, F_GETFL, 0);
     if (flags == -1)
@@ -107,8 +107,8 @@ void Server::handleRequest(int client_fd)
     std::string response;
     try
     {
-        Request req(buffer);
-        response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!\r\n";
+        HttpRequest req(buffer);
+        response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
     }
     catch (const std::exception& e)
     {
@@ -136,7 +136,7 @@ void Server::start()
 
 void Server::shutdownServer()
 {
-    for (size_t i = 0; i < client_fds.size(); i++)
+    for (size_t i = 0; i < client_fds.size(); ++i)
         close(client_fds[i]);
     close(server_fd);
     std::cout << "Server shut down.\n";

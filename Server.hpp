@@ -1,21 +1,6 @@
 #pragma once
 
-#include <iostream>
-#include <string>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <cstdio>
-#include <netinet/in.h>
-#include <cstdlib>
-#include "Request.hpp"
-#include <poll.h>
-#include <algorithm>
-#include <vector>
-#include <fcntl.h>
-
+#include "HttpRequest.hpp"
 
 class Server
 {
@@ -31,7 +16,7 @@ class Server
         void handleConnections();
         void acceptConnection();
         void closeConnection(int client_fd);
-        void handleRequest(int client_fd);
+        void handleHttpRequest(int client_fd);
 
     public:
         Server(std::string host, int port);
