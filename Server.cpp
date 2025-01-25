@@ -40,6 +40,7 @@ void Server::handleConnections()
         fds[i + 1].fd = client_fds[i];
         fds[i + 1].events = POLLIN | POLLOUT;
     }
+    //change to epoll later
     int ret = poll(fds, client_fds.size() + 1, -1);
     if (ret == -1)
         throw std::runtime_error("Poll failed");
@@ -87,6 +88,7 @@ void Server::handleHttpRequest(int client_fd)
 
     const size_t buffer_size = 1024;
     char buffer[buffer_size];
+    memset(buffer, 0, buffer_size);
     std::string full_request;
 
     int bytes_received;

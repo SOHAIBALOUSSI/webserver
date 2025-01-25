@@ -22,3 +22,5 @@
 #include <algorithm>
 #include <map>
 #include <vector>
+
+std::string&  toLowerCase(std::string& str);

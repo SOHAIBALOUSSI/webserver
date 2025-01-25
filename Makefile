@@ -3,7 +3,7 @@ CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 
 NAME = server
 
-SRCS = main.cpp HttpRequest.cpp Server.cpp
+SRCS = main.cpp HttpRequest.cpp Server.cpp Common.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(NAME)
