@@ -6,3 +6,9 @@ std::string&  toLowerCase(std::string& str)
     str[i] = std::tolower(str[i]);
   return (str);
 }
+
+// int  toNumber(std::string& str)
+// {
+ 
+
+// }
