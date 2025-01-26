@@ -17,8 +17,6 @@ class Server
         
         void setupServer();
         void handleConnections();
-        void acceptConnection();
-        void closeConnection(int client_fd);
         void handleHttpRequest(int client_fd);
 
     public:
@@ -26,8 +24,10 @@ class Server
         Server(const Config& serverConfig);
         ~Server();
 
+        int acceptConnection(int listeningSocket);
+        void closeConnection(int client_fd);
 
-        std::vector<Socket> getSockets( void ) const;
+        const std::vector<Socket>& getSockets( void ) const;
         void start();
         void shutdownServer();
 };

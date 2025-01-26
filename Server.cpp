@@ -20,7 +20,9 @@ Server::Server(const Config& serverConfig)
             serverSocket.create();
             sockaddr_in serverAddr;
             serverAddr.sin_family = AF_INET;
+            std::cout << "PORT : " << *it << std::endl;
             serverAddr.sin_port = htons(*it);
+            std::cout << "IP ADDRESS : (STRING FORM) : " << serverConfig.host << " (BINARY FORM) : " << stringToIpBinary(serverConfig.host) << '\n';
             serverAddr.sin_addr.s_addr = htonl(stringToIpBinary(serverConfig.host));
             serverSocket.bind(serverAddr);
             serverSocket.listen(SOMAXCONN);
@@ -69,7 +71,7 @@ void Server::handleConnections()
     if (ret == -1)
         throw std::runtime_error("Poll failed");
     if (fds[0].revents & POLLIN)
-        acceptConnection();
+        acceptConnection(fds[0].fd);
     for (size_t i = 0; i < clientSockets.size(); ++i)
     {
         if (fds[i + 1].revents & POLLIN)
@@ -77,15 +79,16 @@ void Server::handleConnections()
     }
 }
 
-void Server::acceptConnection()
+int Server::acceptConnection(int listeningSocket)
 {
     sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
-    if (client_fd == -1)
-        throw std::runtime_error("Error accepting connection");
-    clientSockets.push_back(client_fd);
+    int clientSocket = accept(listeningSocket, (struct sockaddr*)&client_addr, &client_len);
+    if (clientSocket == -1)
+        throw std::runtime_error("Error accepting connection: " + std::string(strerror(errno)));
+    clientSockets.push_back(clientSocket);
     std::cout << "New client connected.\n";
+    return (clientSocket);
 }
 
 void Server::closeConnection(int client_fd)
@@ -101,15 +104,6 @@ void Server::closeConnection(int client_fd)
 
 void Server::handleHttpRequest(int client_fd)
 {
-    int flags = fcntl(client_fd, F_GETFL, 0);
-    if (flags == -1)
-    {
-        std::cerr << "Error getting flags for client socket\n";
-        closeConnection(client_fd);
-        return;
-    }
-    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
-
     const size_t buffer_size = 1024;
     char buffer[buffer_size];
     memset(buffer, 0, buffer_size);
@@ -140,7 +134,8 @@ void Server::handleHttpRequest(int client_fd)
     {
         response = e.what();
     }
-    if (send(client_fd, response.c_str(), response.size(), 0) == -1) {
+    if (send(client_fd, response.c_str(), response.size(), 0) == -1) 
+    {
         std::cerr << "Error sending data\n";
         closeConnection(client_fd);
     }
@@ -174,7 +169,7 @@ Server::~Server()
     shutdownServer();
 }
 
-std::vector<Socket> Server::getSockets( void ) const
+const std::vector<Socket>& Server::getSockets( void ) const
 {
     return (listeningSockets);
 }

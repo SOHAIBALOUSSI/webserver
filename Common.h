@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <map>
 #include <vector>
+#include <queue>
 
 std::string&  toLowerCase(std::string& str);
 uint32_t stringToIpBinary(std::string addressIp);
