@@ -24,3 +24,4 @@
 #include <vector>
 
 std::string&  toLowerCase(std::string& str);
+int stringToIpBinary(std::string addressIp);

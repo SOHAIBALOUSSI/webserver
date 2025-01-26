@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HttpRequest.hpp"
+#include "Config.hpp"
 
 class Server
 {
@@ -10,7 +11,7 @@ class Server
         std::vector<int> client_fds;
         int port;
         std::string host;
-        //need config file class here
+        std::vector<Config> serverPool;
         
         void setupServer();
         void handleConnections();
