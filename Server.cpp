@@ -36,7 +36,16 @@ Server::Server(const Config& serverConfig)
 
 void Server::setupServer()
 {
-    
+    server_fd = socket(PF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1)
+        throw std::runtime_error("Error creating socket");
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    {
+        perror("setsockopt failed");
+        close(server_fd);
+        throw std::runtime_error("Error setting socket opt");
+    }
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -92,6 +101,15 @@ void Server::closeConnection(int client_fd)
 
 void Server::handleHttpRequest(int client_fd)
 {
+    int flags = fcntl(client_fd, F_GETFL, 0);
+    if (flags == -1)
+    {
+        std::cerr << "Error getting flags for client socket\n";
+        closeConnection(client_fd);
+        return;
+    }
+    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+
     const size_t buffer_size = 1024;
     char buffer[buffer_size];
     memset(buffer, 0, buffer_size);

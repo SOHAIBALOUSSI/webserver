@@ -12,7 +12,7 @@ uint32_t stringToIpBinary(std::string addressIp)
   uint32_t ip[4];
   std::istringstream iss(addressIp);
   std::string octet;
-  uint32_t actualIpAddress;
+  uint32_t actualIpAddress = 0;
   for (int i = 0; i < 4; i++)
   {
     std::getline(iss, octet, '.');

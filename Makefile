@@ -1,9 +1,9 @@
 CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98
+CXXFLAGS = -Wall -Wextra -Werror #-std=c++98
 
 NAME = server
 
-SRCS = main.cpp HttpRequest.cpp Server.cpp Common.cpp
+SRCS = main.cpp HttpRequest.cpp Server.cpp Common.cpp Socket.cpp Config.cpp Route.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(NAME)
