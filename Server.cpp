@@ -9,19 +9,34 @@ Server::Server(std::string host, int port)
     memset(&server_addr, 0, sizeof(server_addr));
 }
 
+Server::Server(const Config& serverConfig)
+{
+    std::set<int>::const_iterator it = serverConfig.ports.begin();
+    while (it != serverConfig.ports.end())
+    {
+        try
+        {
+            Socket serverSocket;
+            serverSocket.create();
+            sockaddr_in serverAddr;
+            serverAddr.sin_family = AF_INET;
+            serverAddr.sin_port = htons(*it);
+            serverAddr.sin_addr.s_addr = htonl(stringToIpBinary(serverConfig.host));
+            serverSocket.bind(serverAddr);
+            serverSocket.listen(SOMAXCONN);
+            listeningSockets.push_back(serverSocket);
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << "Error setting up server on port " << *it << ": " << e.what() << std::endl;
+        }
+        ++it;
+    }
+}
 
 void Server::setupServer()
 {
-    server_fd = socket(PF_INET, SOCK_STREAM, 0);
-    if (server_fd == -1)
-        throw std::runtime_error("Error creating socket");
-    int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
-    {
-        perror("setsockopt failed");
-        close(server_fd);
-        throw std::runtime_error("Error setting socket opt");
-    }
+    
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -32,24 +47,24 @@ void Server::setupServer()
 
 void Server::handleConnections()
 {
-    struct pollfd fds[client_fds.size() + 1];
+    struct pollfd fds[clientSockets.size() + 1];
     fds[0].fd = server_fd;
     fds[0].events = POLLIN;
-    for (size_t i = 0; i < client_fds.size(); ++i)
+    for (size_t i = 0; i < clientSockets.size(); ++i)
     {
-        fds[i + 1].fd = client_fds[i];
+        fds[i + 1].fd = clientSockets[i];
         fds[i + 1].events = POLLIN | POLLOUT;
     }
     //change to epoll later
-    int ret = poll(fds, client_fds.size() + 1, -1);
+    int ret = poll(fds, clientSockets.size() + 1, -1);
     if (ret == -1)
         throw std::runtime_error("Poll failed");
     if (fds[0].revents & POLLIN)
         acceptConnection();
-    for (size_t i = 0; i < client_fds.size(); ++i)
+    for (size_t i = 0; i < clientSockets.size(); ++i)
     {
         if (fds[i + 1].revents & POLLIN)
-            handleHttpRequest(client_fds[i]);
+            handleHttpRequest(clientSockets[i]);
     }
 }
 
@@ -60,32 +75,23 @@ void Server::acceptConnection()
     int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
     if (client_fd == -1)
         throw std::runtime_error("Error accepting connection");
-    client_fds.push_back(client_fd);
+    clientSockets.push_back(client_fd);
     std::cout << "New client connected.\n";
 }
 
 void Server::closeConnection(int client_fd)
 {
-    std::vector<int>::iterator it = std::find(client_fds.begin(), client_fds.end(), client_fd);
-    if (it != client_fds.end())
+    std::vector<int>::iterator it = std::find(clientSockets.begin(), clientSockets.end(), client_fd);
+    if (it != clientSockets.end())
     {
         close(client_fd);
-        client_fds.erase(it);
+        clientSockets.erase(it);
         std::cout << "Connection closed.\n";
     }
 }
 
 void Server::handleHttpRequest(int client_fd)
 {
-    int flags = fcntl(client_fd, F_GETFL, 0);
-    if (flags == -1)
-    {
-        std::cerr << "Error getting flags for client socket\n";
-        closeConnection(client_fd);
-        return;
-    }
-    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
-
     const size_t buffer_size = 1024;
     char buffer[buffer_size];
     memset(buffer, 0, buffer_size);
@@ -138,8 +144,8 @@ void Server::start()
 
 void Server::shutdownServer()
 {
-    for (size_t i = 0; i < client_fds.size(); ++i)
-        close(client_fds[i]);
+    for (size_t i = 0; i < clientSockets.size(); ++i)
+        close(clientSockets[i]);
     close(server_fd);
     std::cout << "Server shut down.\n";
 }
@@ -148,4 +154,9 @@ void Server::shutdownServer()
 Server::~Server()
 {
     shutdownServer();
+}
+
+std::vector<Socket> Server::getSockets( void ) const
+{
+    return (listeningSockets);
 }

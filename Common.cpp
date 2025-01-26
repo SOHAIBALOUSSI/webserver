@@ -7,17 +7,19 @@ std::string&  toLowerCase(std::string& str)
   return (str);
 }
 
-int stringToIpBinary(std::string addressIp)
+uint32_t stringToIpBinary(std::string addressIp)
 {
-  int ip[4];
+  uint32_t ip[4];
   std::istringstream iss(addressIp);
   std::string octet;
-  int actualIpAddress;
+  uint32_t actualIpAddress;
   for (int i = 0; i < 4; i++)
   {
     std::getline(iss, octet, '.');
     ip[i] = std::atoi(octet.c_str());
+    actualIpAddress |= (ip[i] << (24 - (i * 8)));
   }
-  actualIpAddress = (ip[0] << 24) | (ip[1] << 16) | (ip[2] << 8) | ip[3];
+  if (iss.peek() != EOF)
+    throw std::invalid_argument("Invalid IP address format: " + addressIp);
   return (actualIpAddress);
 }

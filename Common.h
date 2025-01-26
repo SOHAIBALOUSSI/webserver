@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <sys/epoll.h>
 
 #include <errno.h>
 
@@ -24,4 +25,4 @@
 #include <vector>
 
 std::string&  toLowerCase(std::string& str);
-int stringToIpBinary(std::string addressIp);
+uint32_t stringToIpBinary(std::string addressIp);

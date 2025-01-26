@@ -2,16 +2,18 @@
 
 #include "HttpRequest.hpp"
 #include "Config.hpp"
+#include "Socket.hpp"
 
 class Server
 {
     private:
         int server_fd;
         sockaddr_in server_addr;
-        std::vector<int> client_fds;
         int port;
+        std::vector<int> clientSockets;
+        std::vector<Socket> listeningSockets;
         std::string host;
-        std::vector<Config> serverPool;
+        Config serverConfig;
         
         void setupServer();
         void handleConnections();
@@ -21,8 +23,11 @@ class Server
 
     public:
         Server(std::string host, int port);
+        Server(const Config& serverConfig);
         ~Server();
 
+
+        std::vector<Socket> getSockets( void ) const;
         void start();
         void shutdownServer();
 };
