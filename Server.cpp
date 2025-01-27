@@ -56,29 +56,6 @@ void Server::setupServer()
     listen(server_fd, SOMAXCONN);
 }
 
-// void Server::handleConnections()
-// {
-//     struct pollfd fds[clientSockets.size() + 1];
-//     fds[0].fd = server_fd;
-//     fds[0].events = POLLIN;
-//     for (size_t i = 0; i < clientSockets.size(); ++i)
-//     {
-//         fds[i + 1].fd = clientSockets[i];
-//         fds[i + 1].events = POLLIN | POLLOUT;
-//     }
-//     //change to epoll later
-//     int ret = poll(fds, clientSockets.size() + 1, -1);
-//     if (ret == -1)
-//         throw std::runtime_error("Poll failed");
-//     if (fds[0].revents & POLLIN)
-//         acceptConnection(fds[0].fd);
-//     for (size_t i = 0; i < clientSockets.size(); ++i)
-//     {
-//         if (fds[i + 1].revents & POLLIN)
-//             handleHttpRequest(clientSockets[i]);
-//     }
-// }
-
 int Server::acceptConnection(int listeningSocket)
 {
     sockaddr_in client_addr;
@@ -105,58 +82,6 @@ void Server::closeConnection(int client_fd)
         std::cout << "Connection closed.\n";
     }
 }
-
-// void Server::handleHttpRequest(int client_fd)
-// {
-//     const size_t buffer_size = 1024;
-//     char buffer[buffer_size];
-//     memset(buffer, 0, buffer_size);
-//     std::string full_request;
-
-//     int bytes_received;
-//     while ((bytes_received = recv(client_fd, buffer, buffer_size, 0)) > 0)
-//         full_request.append(buffer, bytes_received);
-//     if (bytes_received == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
-//     {
-//         std::cerr << "Error receiving data\n";
-//         closeConnection(client_fd);
-//     }
-//     else if (bytes_received == 0)
-//     {
-//         std::cout << "Client disconnected\n";
-//         closeConnection(client_fd);
-//         return;
-//     }
-//     std::string response;
-//     try
-//     {
-//         HttpRequest req(buffer);
-//         response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
-//     }
-//     catch (const std::exception& e)
-//     {
-//         response = e.what();
-//     }
-//     if (send(client_fd, response.c_str(), response.size(), 0) == -1) 
-//     {
-//         std::cerr << "Error sending data\n";
-//         closeConnection(client_fd);
-//     }
-// }
-
-// void Server::start()
-// {
-//     try
-//     {
-//         setupServer();
-//         while (true)
-//             handleConnections();
-//     }
-//     catch (const std::exception& e)
-//     {
-//         std::cerr << "Error: " << e.what() << std::endl;
-//     }
-// }
 
 void Server::shutdownServer()
 {
