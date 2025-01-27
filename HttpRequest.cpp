@@ -12,14 +12,14 @@ HttpRequest::HttpRequest(const std::string &request) {
     oss >> method >> url >> version;
     if ((method.empty() || url.empty() || version.empty()))
         throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nMalformed request line");
-    std::cout << "\"" << method << "\" " <<  "\"" << url << "\" " <<  "\"" << version << "\" " << std::endl; 
+    std::cout << "LOG: received request:\n      \"" << method << "\" " <<  "\"" << url << "\" " <<  "\"" << version << "\" " << std::endl; 
     if ((method == "GET" || method == "POST" || method == "DELETE")
         || (version == "HTTP/1.0" || version == "HTTP/1.1"))
     {
         while (std::getline(iss, requestLine)) {
             if (requestLine == "\r" || requestLine.empty()) break;
             std::size_t pos = requestLine.find(':');
-            std::cout << requestLine << std::endl;
+            std::cout << "      " << requestLine << std::endl;
             if (pos == std::string::npos)
                 throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 25\r\n\r\nMalformed request header");
             std::string key = requestLine.substr(0, pos);

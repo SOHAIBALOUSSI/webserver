@@ -24,6 +24,8 @@ class ServerManager
 
         void    handleConnections(int listeningSocket);
         void    handleRequests(int clientSocket);
+
+        void    setNonBlocking(int fd);
     
     public  :
         ServerManager();

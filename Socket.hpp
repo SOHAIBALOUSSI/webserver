@@ -14,6 +14,5 @@ class Socket
     void  listen(int backlog);
     void  bind(const sockaddr_in server_addr);
     int   accept();
-    void  setNonBlocking();
     int getFd( void ) const;
 };

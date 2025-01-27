@@ -20,9 +20,9 @@ Server::Server(const Config& serverConfig)
             serverSocket->create();
             sockaddr_in serverAddr;
             serverAddr.sin_family = AF_INET;
-            std::cout << "PORT : " << *it << std::endl;
+            std::clog << "PORT : " << *it << std::endl;
             serverAddr.sin_port = htons(*it);
-            std::cout << "IP ADDRESS : (STRING FORM) : " << serverConfig.host << " (BINARY FORM) : " << stringToIpBinary(serverConfig.host) << '\n';
+            std::clog << "IP ADDRESS : (STRING FORM) : " << serverConfig.host << " (BINARY FORM) : " << stringToIpBinary(serverConfig.host) << '\n';
             serverAddr.sin_addr.s_addr = htonl(stringToIpBinary(serverConfig.host));
             serverSocket->bind(serverAddr);
             serverSocket->listen(SOMAXCONN);
@@ -30,7 +30,7 @@ Server::Server(const Config& serverConfig)
         }
         catch(const std::exception& e)
         {
-            std::cerr << "Error setting up server on port " << *it << ": " << e.what() << std::endl;
+            std::cerr << "ERROR:  setting up server on port " << *it << ": " << e.what() << std::endl;
         }
         ++it;
     }
@@ -40,13 +40,12 @@ void Server::setupServer()
 {
     server_fd = socket(PF_INET, SOCK_STREAM, 0);
     if (server_fd == -1)
-        throw std::runtime_error("Error creating socket");
+        throw std::runtime_error("ERROR: creating socket" + std::string(strerror(errno)));
     int opt = 1;
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     {
-        perror("setsockopt failed");
         close(server_fd);
-        throw std::runtime_error("Error setting socket opt");
+        throw std::runtime_error("ERROR:  setting socket opt" + std::string(strerror(errno)));
     }
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
@@ -65,10 +64,10 @@ int Server::acceptConnection(int listeningSocket)
     {
         // if (errno == EAGAIN || errno == EWOULDBLOCK)
         //     return -1;
-        throw std::runtime_error("Error accepting connection: " + std::string(strerror(errno)));
+        throw std::runtime_error("ERROR:  accepting connection: " + std::string(strerror(errno)));
     }
     clientSockets.push_back(clientSocket);
-    std::cout << "New client connected.\n";
+    std::clog << "LOG: New client connected, client socket N" << clientSocket << "\n";
     return (clientSocket);
 }
 
@@ -79,7 +78,7 @@ void Server::closeConnection(int client_fd)
     {
         close(client_fd);
         clientSockets.erase(it);
-        std::cout << "Connection closed.\n";
+        std::clog << "LOG: Connection closed.\n";
     }
 }
 
@@ -88,7 +87,7 @@ void Server::shutdownServer()
     for (size_t i = 0; i < clientSockets.size(); ++i)
         close(clientSockets[i]);
     close(server_fd);
-    std::cout << "Server shut down.\n";
+    std::clog << "LOG: Server shut down.\n";
 }
 
 
