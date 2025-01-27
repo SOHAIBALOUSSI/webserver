@@ -9,10 +9,10 @@ class ServerManager
     private :
         std::vector<Config> serverPool;
         std::vector<Server*> servers;
-        std::map<int, Socket> listeningSockets;
+        std::map<int, Socket*> listeningSockets;
         std::vector<struct epoll_event> events;
         std::queue<HttpRequest> requests;
-        int epoll_fd;
+        int epollFd;
 
         void	startServers(const std::vector<Config>& _serverPool);
         void    addListeningSockets(std::vector<Server*>& servers);

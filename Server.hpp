@@ -11,13 +11,13 @@ class Server
         sockaddr_in server_addr;
         int port;
         std::vector<int> clientSockets;
-        std::vector<Socket> listeningSockets;
+        std::vector<Socket*> listeningSockets;
         std::string host;
         Config serverConfig;
         
         void setupServer();
-        void handleConnections();
-        void handleHttpRequest(int client_fd);
+        // void handleConnections();
+        // void handleHttpRequest(int client_fd);
 
     public:
         Server(std::string host, int port);
@@ -27,7 +27,7 @@ class Server
         int acceptConnection(int listeningSocket);
         void closeConnection(int client_fd);
 
-        const std::vector<Socket>& getSockets( void ) const;
-        void start();
+        const std::vector<Socket*>& getSockets( void ) const;
+        // void start();
         void shutdownServer();
 };

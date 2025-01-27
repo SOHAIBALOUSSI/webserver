@@ -16,16 +16,16 @@ Server::Server(const Config& serverConfig)
     {
         try
         {
-            Socket serverSocket;
-            serverSocket.create();
+            Socket* serverSocket = new Socket;
+            serverSocket->create();
             sockaddr_in serverAddr;
             serverAddr.sin_family = AF_INET;
             std::cout << "PORT : " << *it << std::endl;
             serverAddr.sin_port = htons(*it);
             std::cout << "IP ADDRESS : (STRING FORM) : " << serverConfig.host << " (BINARY FORM) : " << stringToIpBinary(serverConfig.host) << '\n';
             serverAddr.sin_addr.s_addr = htonl(stringToIpBinary(serverConfig.host));
-            serverSocket.bind(serverAddr);
-            serverSocket.listen(SOMAXCONN);
+            serverSocket->bind(serverAddr);
+            serverSocket->listen(SOMAXCONN);
             listeningSockets.push_back(serverSocket);
         }
         catch(const std::exception& e)
@@ -56,28 +56,28 @@ void Server::setupServer()
     listen(server_fd, SOMAXCONN);
 }
 
-void Server::handleConnections()
-{
-    struct pollfd fds[clientSockets.size() + 1];
-    fds[0].fd = server_fd;
-    fds[0].events = POLLIN;
-    for (size_t i = 0; i < clientSockets.size(); ++i)
-    {
-        fds[i + 1].fd = clientSockets[i];
-        fds[i + 1].events = POLLIN | POLLOUT;
-    }
-    //change to epoll later
-    int ret = poll(fds, clientSockets.size() + 1, -1);
-    if (ret == -1)
-        throw std::runtime_error("Poll failed");
-    if (fds[0].revents & POLLIN)
-        acceptConnection(fds[0].fd);
-    for (size_t i = 0; i < clientSockets.size(); ++i)
-    {
-        if (fds[i + 1].revents & POLLIN)
-            handleHttpRequest(clientSockets[i]);
-    }
-}
+// void Server::handleConnections()
+// {
+//     struct pollfd fds[clientSockets.size() + 1];
+//     fds[0].fd = server_fd;
+//     fds[0].events = POLLIN;
+//     for (size_t i = 0; i < clientSockets.size(); ++i)
+//     {
+//         fds[i + 1].fd = clientSockets[i];
+//         fds[i + 1].events = POLLIN | POLLOUT;
+//     }
+//     //change to epoll later
+//     int ret = poll(fds, clientSockets.size() + 1, -1);
+//     if (ret == -1)
+//         throw std::runtime_error("Poll failed");
+//     if (fds[0].revents & POLLIN)
+//         acceptConnection(fds[0].fd);
+//     for (size_t i = 0; i < clientSockets.size(); ++i)
+//     {
+//         if (fds[i + 1].revents & POLLIN)
+//             handleHttpRequest(clientSockets[i]);
+//     }
+// }
 
 int Server::acceptConnection(int listeningSocket)
 {
@@ -85,7 +85,11 @@ int Server::acceptConnection(int listeningSocket)
     socklen_t client_len = sizeof(client_addr);
     int clientSocket = accept(listeningSocket, (struct sockaddr*)&client_addr, &client_len);
     if (clientSocket == -1)
+    {
+        // if (errno == EAGAIN || errno == EWOULDBLOCK)
+        //     return -1;
         throw std::runtime_error("Error accepting connection: " + std::string(strerror(errno)));
+    }
     clientSockets.push_back(clientSocket);
     std::cout << "New client connected.\n";
     return (clientSocket);
@@ -102,58 +106,57 @@ void Server::closeConnection(int client_fd)
     }
 }
 
-void Server::handleHttpRequest(int client_fd)
-{
-    const size_t buffer_size = 1024;
-    char buffer[buffer_size];
-    memset(buffer, 0, buffer_size);
-    std::string full_request;
+// void Server::handleHttpRequest(int client_fd)
+// {
+//     const size_t buffer_size = 1024;
+//     char buffer[buffer_size];
+//     memset(buffer, 0, buffer_size);
+//     std::string full_request;
 
-    int bytes_received;
-    while ((bytes_received = recv(client_fd, buffer, buffer_size, 0)) > 0)
-        full_request.append(buffer, bytes_received);
-    if (bytes_received == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
-    {
-        std::cerr << "Error receiving data\n";
-        closeConnection(client_fd);
-    }
-    else if (bytes_received == 0)
-    {
-        std::cout << "Client disconnected\n";
-        closeConnection(client_fd);
-        return;
-    }
-    buffer[bytes_received] = '\0';
-    std::string response;
-    try
-    {
-        HttpRequest req(buffer);
-        response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
-    }
-    catch (const std::exception& e)
-    {
-        response = e.what();
-    }
-    if (send(client_fd, response.c_str(), response.size(), 0) == -1) 
-    {
-        std::cerr << "Error sending data\n";
-        closeConnection(client_fd);
-    }
-}
+//     int bytes_received;
+//     while ((bytes_received = recv(client_fd, buffer, buffer_size, 0)) > 0)
+//         full_request.append(buffer, bytes_received);
+//     if (bytes_received == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
+//     {
+//         std::cerr << "Error receiving data\n";
+//         closeConnection(client_fd);
+//     }
+//     else if (bytes_received == 0)
+//     {
+//         std::cout << "Client disconnected\n";
+//         closeConnection(client_fd);
+//         return;
+//     }
+//     std::string response;
+//     try
+//     {
+//         HttpRequest req(buffer);
+//         response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
+//     }
+//     catch (const std::exception& e)
+//     {
+//         response = e.what();
+//     }
+//     if (send(client_fd, response.c_str(), response.size(), 0) == -1) 
+//     {
+//         std::cerr << "Error sending data\n";
+//         closeConnection(client_fd);
+//     }
+// }
 
-void Server::start()
-{
-    try
-    {
-        setupServer();
-        while (true)
-            handleConnections();
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "Error: " << e.what() << std::endl;
-    }
-}
+// void Server::start()
+// {
+//     try
+//     {
+//         setupServer();
+//         while (true)
+//             handleConnections();
+//     }
+//     catch (const std::exception& e)
+//     {
+//         std::cerr << "Error: " << e.what() << std::endl;
+//     }
+// }
 
 void Server::shutdownServer()
 {
@@ -166,10 +169,11 @@ void Server::shutdownServer()
 
 Server::~Server()
 {
-    shutdownServer();
+    std::cerr << "LOG: Server shutting down...\n";
+    // shutdownServer();
 }
 
-const std::vector<Socket>& Server::getSockets( void ) const
+const std::vector<Socket*>& Server::getSockets( void ) const
 {
     return (listeningSockets);
 }
