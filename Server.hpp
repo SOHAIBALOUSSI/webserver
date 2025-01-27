@@ -15,12 +15,12 @@ class Server
         std::string host;
         Config serverConfig;
         
-        void setupServer();
+        // void setupServer();
         // void handleConnections();
         // void handleHttpRequest(int client_fd);
+        void shutdownServer();
 
     public:
-        Server(std::string host, int port);
         Server(const Config& serverConfig);
         ~Server();
 
@@ -29,5 +29,4 @@ class Server
 
         const std::vector<Socket*>& getSockets( void ) const;
         // void start();
-        void shutdownServer();
 };

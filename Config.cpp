@@ -281,3 +281,15 @@ void    Config::printConfig() {
     }
     std::cerr << "] SERVER END"<< std::endl << std::endl;
 }
+
+
+const std::string& Config::getHost( void )  const
+{
+    return (host);
+}
+
+const std::set<int>& Config::getPorts( void ) const
+{
+    return (ports);
+}
+

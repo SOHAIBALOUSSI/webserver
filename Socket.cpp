@@ -10,6 +10,12 @@ void  Socket::create()
   int opt = 1;
   if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
     throw std::runtime_error("ERROR:  setting socket opt: " + std::string(strerror(errno)));
+  opt = 1;
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) == -1)
+    throw std::runtime_error("ERROR:  setting socket opt: " + std::string(strerror(errno)));
+  opt = 1;
+  if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) == -1)
+    throw std::runtime_error("ERROR:  setting socket opt: " + std::string(strerror(errno)));
 }
 
 void  Socket::listen(int backlog)
@@ -18,7 +24,7 @@ void  Socket::listen(int backlog)
     throw std::runtime_error("Listening failed: " + std::string(strerror(errno)));
 }
 
-void  Socket::bind(const sockaddr_in server_addr)
+void  Socket::bind(const sockaddr_in& server_addr)
 {
   if (::bind(fd, (sockaddr *)&server_addr, sizeof(server_addr)) == -1)
     throw std::runtime_error("Binding failed: " + std::string(strerror(errno)));
@@ -47,6 +53,6 @@ Socket::~Socket()
   {
     close(fd);
     std::cerr << "LOG: closing file descriptor " << fd << '\n';
-    fd = -1;  
+    fd = -1;
   }
 }

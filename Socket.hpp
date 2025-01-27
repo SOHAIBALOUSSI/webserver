@@ -12,7 +12,7 @@ class Socket
     ~Socket();
     void  create();
     void  listen(int backlog);
-    void  bind(const sockaddr_in server_addr);
+    void  bind(const sockaddr_in& server_addr);
     int   accept();
     int getFd( void ) const;
 };

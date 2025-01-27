@@ -27,6 +27,9 @@ public:
     void    insertErrorPages(std::string value);
     void    insertRoute(std::string value);
 
+    const std::string& getHost( void )  const;
+    const std::set<int>& getPorts( void ) const;
+
 };
 
 std::string readConfigFile(std::string path);
