@@ -72,7 +72,12 @@ Server::~Server()
     shutdownServer();
 }
 
-const std::vector<Socket*>& Server::getSockets( void ) const
+const std::vector<Socket*>& Server::getListeningSockets( void ) const
 {
     return (listeningSockets);
+}
+
+const std::vector<int>& Server::getClientSockets( void ) const
+{
+    return (clientSockets);
 }

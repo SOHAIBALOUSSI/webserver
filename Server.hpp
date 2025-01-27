@@ -27,6 +27,7 @@ class Server
         int acceptConnection(int listeningSocket);
         void closeConnection(int client_fd);
 
-        const std::vector<Socket*>& getSockets( void ) const;
+        const std::vector<Socket*>& getListeningSockets( void ) const;
+        const std::vector<int>& getClientSockets( void ) const;
         // void start();
 };

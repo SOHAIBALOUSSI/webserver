@@ -32,8 +32,8 @@ void    ServerManager::addListeningSockets(std::vector<Server*>& servers)
     {
         std::clog << "INFO: Server number " << i + 1 << '\n';
         int j = 0;
-        std::vector<Socket*>::const_iterator socket = (*server)->getSockets().begin();
-        while (socket != (*server)->getSockets().end())
+        std::vector<Socket*>::const_iterator socket = (*server)->getListeningSockets().begin();
+        while (socket != (*server)->getListeningSockets().end())
         {
             std::clog << "INFO: Socket number " << j + 1 << " for Server number " << i + 1 << ":\n";
             int listeningSocket = (*socket)->getFd();
@@ -112,24 +112,36 @@ void    ServerManager::epollListen()
                 if (send(currentFd, response.c_str(), response.size(), 0) == -1) 
                 {
                     std::cerr << "ERROR: Sending data\n";
-                    findServerBySocket(currentFd)->closeConnection(currentFd);
-                    epoll_ctl(epollFd, EPOLL_CTL_DEL, currentFd, NULL);
+                    Server* server = findServerBySocket(currentFd);
+                    if (server)
+                    {
+                        server->closeConnection(currentFd);
+                        epoll_ctl(epollFd, EPOLL_CTL_DEL, currentFd, NULL);
+                    }
                 }
                 struct epoll_event event;
                 event.events = EPOLLIN;
                 event.data.fd = currentFd;
                 if (epoll_ctl(epollFd, EPOLL_CTL_MOD, currentFd, &event) == -1)
                 {
-                    findServerBySocket(currentFd)->closeConnection(currentFd);
-                    epoll_ctl(epollFd, EPOLL_CTL_DEL, currentFd, NULL);
+                    Server* server = findServerBySocket(currentFd);
+                    if (server)
+                    {
+                        server->closeConnection(currentFd);
+                        epoll_ctl(epollFd, EPOLL_CTL_DEL, currentFd, NULL);
+                    }
                     return;
                 }
             }
             if (events[i].events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP))
             {
                 std::cerr << "ERROR: " << strerror(errno) << "\n";
-                findServerBySocket(currentFd)->closeConnection(currentFd);
-                epoll_ctl(epollFd, EPOLL_CTL_DEL, currentFd, NULL);
+                Server* server = findServerBySocket(currentFd);
+                if (server)
+                {
+                    server->closeConnection(currentFd);
+                    epoll_ctl(epollFd, EPOLL_CTL_DEL, currentFd, NULL);
+                }
                 continue ;
             }
         }
@@ -169,14 +181,22 @@ void    ServerManager::handleRequests(int clientSocket)
     if (bytes_received == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
     {
         std::cerr << "ERROR: receiving data in client socket N" << clientSocket << "\n";
-        findServerBySocket(clientSocket)->closeConnection(clientSocket);
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+        Server* server = findServerBySocket(clientSocket);
+        if (server)
+        {
+            server->closeConnection(clientSocket);
+            epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+        }
     }
     else if (bytes_received == 0)
     {
         std::cout << "LOG: Client disconnected, closing client socket N" << clientSocket << "\n";
-        findServerBySocket(clientSocket)->closeConnection(clientSocket);
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+        Server* server = findServerBySocket(clientSocket);
+        if (server)
+        {
+            server->closeConnection(clientSocket);
+            epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+        }
     }
 
     struct epoll_event event;
@@ -184,8 +204,12 @@ void    ServerManager::handleRequests(int clientSocket)
     event.data.fd = clientSocket;
     if (epoll_ctl(epollFd, EPOLL_CTL_MOD, clientSocket, &event) == -1)
     {
-        findServerBySocket(clientSocket)->closeConnection(clientSocket);
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+        Server* server = findServerBySocket(clientSocket);
+        if (server)
+        {
+            server->closeConnection(clientSocket);
+            epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+        }
         return;
     }
     std::string response;
@@ -200,8 +224,12 @@ void    ServerManager::handleRequests(int clientSocket)
         if (send(clientSocket, response.c_str(), response.size(), 0) == -1)
         {
             std::cerr << "ERROR: sending data to client socket N" << clientSocket << "\n";
-            findServerBySocket(clientSocket)->closeConnection(clientSocket);
-            epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+            Server* server = findServerBySocket(clientSocket);
+            if (server)
+            {
+                server->closeConnection(clientSocket);
+                epoll_ctl(epollFd, EPOLL_CTL_DEL, clientSocket, NULL);
+            }
         }
     }
 }
@@ -224,8 +252,8 @@ void  ServerManager::startServers(const std::vector<Config>& _serverPool)
             }
             std::clog << std::endl;
             servers.push_back(server);
-            std::vector<Socket*>::const_iterator socket = server->getSockets().begin();
-            while (socket != server->getSockets().end())
+            std::vector<Socket*>::const_iterator socket = server->getListeningSockets().begin();
+            while (socket != server->getListeningSockets().end())
             {
                 listeningSockets[(*socket)->getFd()] = (*socket);
                 ++socket;
@@ -246,19 +274,32 @@ bool    ServerManager::isListeningSocket(int fd)
 
 Server* ServerManager::findServerBySocket(int fd)
 {
-    std::vector<Server*>::iterator server = servers.begin();
-    while (server != servers.end())
+    if (fd < 0)
+        return (NULL);
+    for (int i = 0; i < servers.size(); i++)
     {
-        std::vector<Socket*>::const_iterator socket = (*server)->getSockets().begin();
-        while (socket != (*server)->getSockets().end())
+        if (isListeningSocket(fd))
         {
-            std::cerr << "searchinf for server by socket " << (*socket)->getFd() << '\n'; //INFINITE LOOP HERE + WILL FIX IT 
-            if ((*socket)->getFd() == fd)
-                return (*server);
+            const std::vector<Socket*>& listeningSockets = servers[i]->getListeningSockets();
+            for (int j = 0; j < listeningSockets.size(); j++)
+            {
+                std::cerr << "searching for server by socket " << listeningSockets[j]->getFd() << '\n';
+                if (listeningSockets[j]->getFd() == fd)
+                    return (servers[i]);
+            }
         }
-        ++server;
+        else
+        {
+            const std::vector<int>& clientSockets = servers[i]->getClientSockets();        
+            for (int k = 0; k < clientSockets.size(); k++)
+            {
+                std::cout << "clientSocket: " << clientSockets[i] << "; fd to compare with: " << fd << '\n';
+                if (clientSockets[k] == fd)
+                    return (servers[i]);
+            }
+        }
     }
-    std::cerr <<"appah\n\n\n\n\n\n\n";
+    return (NULL);
     throw std::runtime_error("LOG: Socket FD not found in any server: " + std::string(strerror(errno)));
 }
 
