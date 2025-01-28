@@ -1,5 +1,5 @@
-#include "Server.hpp"
-#include "HttpRequest.hpp"
+#include "../../include/Server.hpp"
+#include "../../include/HttpRequest.hpp"
 
 Server::Server(const Config& serverConfig)
 {

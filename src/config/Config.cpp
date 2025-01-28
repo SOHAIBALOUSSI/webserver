@@ -1,4 +1,4 @@
-#include "Config.hpp"
+#include "../../include/Config.hpp"
 
 Config::Config() {
     max_body_size = std::numeric_limits<unsigned long long>::max();
