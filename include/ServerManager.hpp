@@ -2,7 +2,7 @@
 
     #include "Common.h"
     #include "Server.hpp"
-
+    #include "Client.hpp"
 
     class ServerManager
     {
@@ -12,18 +12,32 @@
             std::map<int, Socket*> listeningSockets;
             std::vector<struct epoll_event> events;
             std::queue<HttpRequest> requests;
+            std::map<int, Client> Clients;
             int epollFd;
 
-            void	startServers(const std::vector<Config>& _serverPool);
+            void	initServers();
+            void    initEpoll();
+            void    eventsLoop();
+
+            void           handleEvent(const epoll_event& event);
+            void           handleConnections(int listeningSocket);
+            void           handleRequest(int clientSocket);
+            std::string    readRequest(int clientSocket);
+            void           sendResponse(int clientSocket);
+
+            void        processRequest(int clientSocket, const std::string& request);
+            void        modifyEpollEvent(int fd, uint32_t events);
+            void        sendErrorResponse(int clientSocket, const std::string& error);
+            void        closeConnection(int fd);
+
             void    addListeningSockets(std::vector<Server*>& servers);
             bool    isListeningSocket(int fd);
-            void    epollListen();
             void    addToEpoll(int clientsocket);
 
             Server* findServerBySocket(int fd);
 
-            void    handleConnections(int listeningSocket);
             void    handleRequests(int clientSocket);
+            void    generateResponse(HttpRequest& request);
 
             void    setNonBlocking(int fd);
         
@@ -31,5 +45,4 @@
             ServerManager();
             ServerManager(const std::vector<Config>& _serverPool);
             ~ServerManager();
-
     };

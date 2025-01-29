@@ -3,6 +3,7 @@
 
 Server::Server(const Config& serverConfig)
 {
+    // give this func another name
     std::set<int>::const_iterator it = serverConfig.ports.begin();
     while (it != serverConfig.ports.end())
     {
@@ -32,12 +33,9 @@ int Server::acceptConnection(int listeningSocket)
     socklen_t client_len = sizeof(client_addr);
     int clientSocket = accept(listeningSocket, (struct sockaddr*)&client_addr, &client_len);
     if (clientSocket == -1)
-    {
-        // if (errno == EAGAIN || errno == EWOULDBLOCK)
-        //     return -1;
         throw std::runtime_error("ERROR:  accepting connection: " + std::string(strerror(errno)));
-    }
-    clientSockets.push_back(clientSocket);
+    clientSockets.push_back(clientSocket); // idk if we still need this
+
     std::clog << "LOG: New client connected, client socket N" << clientSocket << "\n";
     return (clientSocket);
 }

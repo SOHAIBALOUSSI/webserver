@@ -2,13 +2,14 @@
 
 #include <bits/stdc++.h>
 #include "Route.hpp"
+
 class Config
 {
 public:
     std::set<int> ports;
     std::string host;
     std::set<std::string> allowed_methods;
-    unsigned long long max_body_size;
+    unsigned long long max_body_size; // for post request
     std::vector<std::string> server_names;
     std::map<int, std::string> error_pages;
     std::map<std::string, Route> routes; 

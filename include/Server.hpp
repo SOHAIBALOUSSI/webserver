@@ -14,7 +14,7 @@ class Server
         std::vector<Socket*> listeningSockets;
         std::string host;
         Config serverConfig;
-        
+
         // void setupServer();
         // void handleConnections();
         // void handleHttpRequest(int client_fd);
@@ -29,5 +29,4 @@ class Server
 
         const std::vector<Socket*>& getListeningSockets( void ) const;
         const std::vector<int>& getClientSockets( void ) const;
-        // void start();
 };
