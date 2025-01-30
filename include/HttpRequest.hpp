@@ -44,9 +44,9 @@ class HttpRequest
         std::pair<std::string, std::string> splitToPathAndQuery(const std::string& uri);
         bool    isAbsoluteURI();
         bool    isURIchar(char c);
-        std::string& decodeAndNormalize(std::string& path);
-        std::string& decode(std::string& encoded);
-        std::string& normalize(std::string& decoded);
+        std::string decodeAndNormalize(std::string& path);
+        std::string decode(std::string& encoded);
+        std::string normalize(std::string& decoded);
         
         void    validateVersion();
 

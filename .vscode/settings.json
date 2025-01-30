@@ -85,6 +85,14 @@
     "thread": "cpp",
     "typeindex": "cpp",
     "typeinfo": "cpp",
-    "valarray": "cpp"
+    "valarray": "cpp",
+    "expected": "cpp",
+    "format": "cpp",
+    "generator": "cpp",
+    "print": "cpp",
+    "spanstream": "cpp",
+    "stacktrace": "cpp",
+    "stdfloat": "cpp",
+    "text_encoding": "cpp"
   }
 }

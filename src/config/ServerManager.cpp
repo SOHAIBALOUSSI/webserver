@@ -224,7 +224,6 @@ void    ServerManager::eventsLoop() // events Loop (main loop)
     while (1) {
         int eventsNum = epoll_wait(epollFd, events.data(), events.size(), -1);
         if (eventsNum == -1){
-            if (errno == EINTR) continue;
             std::cerr << "ERROR: in epoll_wait: " << strerror(errno) << std::endl;
             continue ;
         }

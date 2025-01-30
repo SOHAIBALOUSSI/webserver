@@ -82,7 +82,7 @@ size_t    HttpRequest::parse(const char* _buffer, size_t bufferLen)
     return (bytesReceived);
 }
 
-// METHOD SP URI SP VERSION 
+// METHOD SP URI SP VERSION CRLF
 size_t    HttpRequest::parseRequestLine()
 {
     std::string line = readLine();
@@ -119,7 +119,7 @@ void    HttpRequest::validateURI()
     path = decodeAndNormalize(path);
     
 }
-std::string& HttpRequest::decode(std::string& encoded)
+std::string HttpRequest::decode(std::string& encoded)
 {
     std::string decoded;
     for (size_t i = 0; i < encoded.size(); i++)
@@ -140,7 +140,7 @@ std::string& HttpRequest::decode(std::string& encoded)
     return (decoded);
 }
 
-std::string& HttpRequest::normalize(std::string& decoded)
+std::string HttpRequest::normalize(std::string& decoded)
 {
     std::istringstream iss(decoded);
     std::string segment;
@@ -159,7 +159,7 @@ std::string& HttpRequest::normalize(std::string& decoded)
     return (normalized);
 }
 
-std::string& HttpRequest::decodeAndNormalize(std::string& path)
+std::string HttpRequest::decodeAndNormalize(std::string& path)
 {
     std::istringstream iss(path);
     std::string segment;
@@ -171,7 +171,7 @@ std::string& HttpRequest::decodeAndNormalize(std::string& path)
 
 bool    HttpRequest::isAbsoluteURI()
 {
-    return (uri.find("http://") == 0 || uri.find("https://") == 0);
+    return (uri.find("http://") == 0);
 }
 
 bool    HttpRequest::isURIchar(char c)
@@ -197,7 +197,7 @@ size_t    HttpRequest::parseChunkedBody()
 {
     
 }
-
+//curl -H "Tranfert-Encoding: chunked" -F "file=/path" 127.0.0.1:8080
 std::string HttpRequest::readLine()
 {
     size_t start = _pos;
@@ -214,7 +214,7 @@ std::string HttpRequest::readLine()
     throw (HttpIncompleteRequest());
 }
 
-std::pair<std::string, std::string> splitToPathAndQuery(const std::string& uri)
+std::pair<std::string, std::string> HttpRequest::splitToPathAndQuery(const std::string& uri)
 {
     size_t queryStart = uri.find('?');
     std::string path = uri.substr(0, queryStart);
