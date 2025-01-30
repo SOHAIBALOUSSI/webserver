@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string.h>
+#include <utility>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -24,6 +25,10 @@
 #include <map>
 #include <vector>
 #include <queue>
+#include <unordered_map>
 
 std::string&  toLowerCase(std::string& str);
 uint32_t stringToIpBinary(std::string addressIp);
+int hexToValue(char c);
+bool    isURIchar(char c);
+bool isHexDigit(char c);

@@ -23,3 +23,15 @@ uint32_t stringToIpBinary(std::string addressIp)
     throw std::invalid_argument("Invalid IP address format: " + addressIp);
   return (actualIpAddress);
 }
+
+int hexToValue(char c)
+{
+  if (c >= 'a' && c <= 'z') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'Z') return c - 'A' + 10;
+  if (c >= '0' && c <= '9') return c - '0';
+}
+
+bool isHexDigit(char c)
+{
+  return (std::isdigit(c) || (std::tolower(c) >= 'a' && std::tolower(c) <= 'f'));
+}

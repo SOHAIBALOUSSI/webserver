@@ -68,7 +68,7 @@ void    Config::insertAllowedMethods(std::string value) {
             throw std::runtime_error("METHOD ERROR: empty method, git good ^^");
         if (method != "GET" && method != "POST" && method != "DELETE")
             throw std::runtime_error("METHOD ERROR: invalid method");
-        allowed_methods.insert(value);
+        allowed_methods.insert(method);
     }
 }
 
