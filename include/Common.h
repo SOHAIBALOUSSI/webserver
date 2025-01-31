@@ -27,6 +27,7 @@
 #include <queue>
 #include <unordered_map>
 
+std::string& strTrim(std::string& str);
 std::string&  toLowerCase(std::string& str);
 uint32_t stringToIpBinary(std::string addressIp);
 int hexToValue(char c);

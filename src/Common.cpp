@@ -1,5 +1,12 @@
 #include "../include/Common.h"
 
+std::string& strTrim(std::string& str)
+{
+  str.erase(0, str.find_first_not_of(" \t"));
+  str.erase(str.find_last_not_of(" \t") + 1);
+  return (str);
+}
+
 std::string&  toLowerCase(std::string& str)
 {
   for (size_t i = 0; i < str.size(); i++)

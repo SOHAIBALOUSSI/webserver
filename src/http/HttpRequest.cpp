@@ -104,21 +104,38 @@ size_t    HttpRequest::parseRequestLine()
 
 void    HttpRequest::validateMethod()
 {
-    if (configs.allowed_methods.find(method) == configs.allowed_methods.end())
+    if (method != "GET" && method != "DELETE" && method != "POST")
         throw (HttpRequestError("HTTP/1.1 405 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 19\r\n\r\nMethod Not Allowed"));
 }
 void    HttpRequest::validateURI()
 {
     if (uri.empty())
         throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nBad URI"));
-    std::pair<std::string, std::string> pathAndQuery = splitToPathAndQuery(uri);
-    std::string path = pathAndQuery.first;
+    std::pair<std::string, std::string> pathAndQuery = splitKeyValue(uri, '?');
+    uriPath = pathAndQuery.first;
     std::string query = pathAndQuery.second;
-    if (path[0] != '/' && !isAbsoluteURI())
+    if (uriPath[0] != '/' && !isAbsoluteURI())
         throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nBad URI"));
-    path = decodeAndNormalize(path);
-    
+    uriPath = decodeAndNormalize();
+    if (!query.empty())
+        uriQueryParams = decodeAndParseQuery(query);
 }
+
+std::map<std::string, std::string> HttpRequest::decodeAndParseQuery(std::string& query)
+{
+    std::istringstream iss(query);
+    std::map<std::string, std::string> queryParams;
+    std::string queryParam, key, value;
+    while (std::getline(iss, queryParam))
+    {
+        size_t pos = queryParam.find('=');
+        key = queryParam.substr(0, pos);
+        value = (pos != std::string::npos ? queryParam.substr(pos + 1) : "");
+        queryParams[key] = value;
+    }
+    return (queryParams);
+}
+
 std::string HttpRequest::decode(std::string& encoded)
 {
     std::string decoded;
@@ -135,7 +152,8 @@ std::string HttpRequest::decode(std::string& encoded)
         }
         else if (!isURIchar(encoded[i]))
             throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nInvalid URI character"));
-        decoded += encoded[i];
+        else
+            decoded += encoded[i];
     }
     return (decoded);
 }
@@ -159,14 +177,14 @@ std::string HttpRequest::normalize(std::string& decoded)
     return (normalized);
 }
 
-std::string HttpRequest::decodeAndNormalize(std::string& path)
+std::string HttpRequest::decodeAndNormalize()
 {
-    std::istringstream iss(path);
+    std::istringstream iss(uriPath);
     std::string segment;
+    std::string decodedAndNormalized;
     while (std::getline(iss, segment, '/'))
-    {
-        
-    }
+        decodedAndNormalized += "/" + decode(segment);
+    return (normalize(decodedAndNormalized));
 }
 
 bool    HttpRequest::isAbsoluteURI()
@@ -185,10 +203,35 @@ void    HttpRequest::validateVersion()
     if (version.empty())
         throw (HttpRequestError("HTTP/1.1"));
 }
+
+//header-field   = field-name ":" OWS field-value OWS
 size_t    HttpRequest::parseHeaders()
 {
+    size_t startPos = _pos;
+    std::string line = readLine();
+    while (!line.empty())
+    {
+        std::pair<std::string, std::string> keyValue = splitKeyValue(line, ':');
+        std::string key = toLowerCase(keyValue.first);
+        std::string value = strTrim(keyValue.second);
+        if (key.empty() || key.find_first_of(" \t") != std::string::npos || key.find_last_of(" \t") != std::string::npos)
+            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed Field Name"));
+        if (headers.find(key) != headers.end())
+            headers[key] += "," + value;
+        else
+            headers[key] = value;
+        line = readLine();
+    }
     state = BODY;
+    return (_pos - startPos);
 }
+bool    HttpRequest::validateValue(std::string& value)
+{
+    const std::string allowed = "!#$%&\'\"*+-.^_`|~";
+    
+}
+
+//curl -H "Tranfert-Encoding: chunked" -F "filename=/path" 127.0.0.1:8080 (for testing POST)
 size_t    HttpRequest::parseBody()
 {
     state = COMPLETE;
@@ -197,7 +240,6 @@ size_t    HttpRequest::parseChunkedBody()
 {
     
 }
-//curl -H "Tranfert-Encoding: chunked" -F "file=/path" 127.0.0.1:8080
 std::string HttpRequest::readLine()
 {
     size_t start = _pos;
@@ -214,9 +256,9 @@ std::string HttpRequest::readLine()
     throw (HttpIncompleteRequest());
 }
 
-std::pair<std::string, std::string> HttpRequest::splitToPathAndQuery(const std::string& uri)
+std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string& uri, char delim)
 {
-    size_t queryStart = uri.find('?');
+    size_t queryStart = uri.find(delim);
     std::string path = uri.substr(0, queryStart);
     std::string query = (queryStart != std::string::npos ? uri.substr(queryStart + 1) : "");
     return (std::make_pair(path, query));

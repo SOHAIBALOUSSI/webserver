@@ -32,24 +32,30 @@ class HttpRequest
         };
         parsingState state;
 
-        std::string method, uri, version, body;
+        std::string method, uri, uriPath, version, body;
+        std::map<std::string, std::string> uriQueryParams;
         std::unordered_map<std::string, std::string> headers;
 
+        //main parsing
         size_t    parse(const char* buffer, size_t bufferLen);
-        
+
+        //request-line parsing
         size_t    parseRequestLine();
         void    validateMethod();
-
         void    validateURI();
-        std::pair<std::string, std::string> splitToPathAndQuery(const std::string& uri);
-        bool    isAbsoluteURI();
-        bool    isURIchar(char c);
-        std::string decodeAndNormalize(std::string& path);
-        std::string decode(std::string& encoded);
-        std::string normalize(std::string& decoded);
-        
         void    validateVersion();
 
+        //URI parsing
+        std::pair<std::string, std::string> splitKeyValue(const std::string& uri, char delim);
+        bool    isAbsoluteURI();
+        bool    isURIchar(char c);
+        std::string decodeAndNormalize();
+        std::string decode(std::string& encoded);
+        std::string normalize(std::string& decoded);
+        std::map<std::string, std::string> decodeAndParseQuery(std::string& query);
+        
+        
+        //headers parsing
         size_t    parseHeaders();
         size_t    parseBody();
         size_t    parseChunkedBody();
@@ -63,8 +69,11 @@ class HttpRequest
         ~HttpRequest();
 
         std::string getMethod() const { return method; }
-        std::string getUrl() const { return uri; }
+        std::string getURI() const { return uri; }
         std::string getVersion() const { return version; }
         std::string getBody() const { return body; }
         std::unordered_map<std::string, std::string> getHeaders() const { return headers; }
+        std::string getUriPath() const { return uriPath; }
+        std::map<std::string, std::string> getUriQueryParams() const { return uriQueryParams; }
+        parsingState getState() const { return state; }
 };
