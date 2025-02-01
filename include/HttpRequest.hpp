@@ -42,7 +42,6 @@ class HttpRequest
         //request-line parsing
         size_t    parseRequestLine();
         void    validateMethod();
-        void    validateURI();
         void    validateVersion();
 
         //URI parsing
@@ -63,6 +62,7 @@ class HttpRequest
         std::string readLine();
 
     public:
+        void    validateURI();
         HttpRequest();
         HttpRequest(const Config& _configs);
         HttpRequest(const std::string &request);
@@ -76,4 +76,5 @@ class HttpRequest
         std::string getUriPath() const { return uriPath; }
         std::map<std::string, std::string> getUriQueryParams() const { return uriQueryParams; }
         parsingState getState() const { return state; }
+        void    setURI(const std::string& _uri) { uri = _uri; };
 };

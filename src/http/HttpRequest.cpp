@@ -107,6 +107,7 @@ void    HttpRequest::validateMethod()
     if (method != "GET" && method != "DELETE" && method != "POST")
         throw (HttpRequestError("HTTP/1.1 405 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 19\r\n\r\nMethod Not Allowed"));
 }
+
 void    HttpRequest::validateURI()
 {
     if (uri.empty())
@@ -116,7 +117,9 @@ void    HttpRequest::validateURI()
     std::string query = pathAndQuery.second;
     if (uriPath[0] != '/' && !isAbsoluteURI())
         throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nBad URI"));
+    std::cout << "Before decoding and normalizing: " << uriPath << "\n";
     uriPath = decodeAndNormalize();
+    std::cout << "After decoding and normalizing: " << uriPath << "\n";
     if (!query.empty())
         uriQueryParams = decodeAndParseQuery(query);
 }
@@ -126,11 +129,13 @@ std::map<std::string, std::string> HttpRequest::decodeAndParseQuery(std::string&
     std::istringstream iss(query);
     std::map<std::string, std::string> queryParams;
     std::string queryParam, key, value;
-    while (std::getline(iss, queryParam))
+    while (std::getline(iss, queryParam, '&'))
     {
         size_t pos = queryParam.find('=');
         key = queryParam.substr(0, pos);
         value = (pos != std::string::npos ? queryParam.substr(pos + 1) : "");
+        if (value.find('#') != std::string::npos)
+            value.erase(value.find('#'));
         queryParams[key] = value;
     }
     return (queryParams);
@@ -168,12 +173,18 @@ std::string HttpRequest::normalize(std::string& decoded)
     {
         if (segment == ".") continue ;
         else if (segment == "..")
-            if (!normalizedSegments.empty()) normalizedSegments.pop_back();
+        {
+            if (!normalizedSegments.empty()) 
+                normalizedSegments.pop_back();
+        }
         else 
             normalizedSegments.push_back(segment);
     }
     for (size_t i = 0; i < normalizedSegments.size(); i++)
+    {
+        if (normalizedSegments[i].empty()) continue;
         normalized += "/" + normalizedSegments[i];
+    }
     return (normalized);
 }
 
@@ -225,16 +236,18 @@ size_t    HttpRequest::parseHeaders()
     state = BODY;
     return (_pos - startPos);
 }
-bool    HttpRequest::validateValue(std::string& value)
-{
-    const std::string allowed = "!#$%&\'\"*+-.^_`|~";
+
+// bool    HttpRequest::validateValue(std::string& value)
+// {
+//     const std::string allowed = "!#$%&\'\"*+-.^_`|~";
     
-}
+// }
 
 //curl -H "Tranfert-Encoding: chunked" -F "filename=/path" 127.0.0.1:8080 (for testing POST)
 size_t    HttpRequest::parseBody()
 {
     state = COMPLETE;
+
 }
 size_t    HttpRequest::parseChunkedBody()
 {
@@ -262,4 +275,84 @@ std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string
     std::string path = uri.substr(0, queryStart);
     std::string query = (queryStart != std::string::npos ? uri.substr(queryStart + 1) : "");
     return (std::make_pair(path, query));
+}
+
+
+
+//UNIT TESTING URI PARSING
+int main(int ac, char **av)
+{
+    std::cout << "______________________________________________________________________________________\n";
+    try 
+    {
+        HttpRequest req;
+        req.setURI("////path/to/resource?name=John%20Doe&age=30");
+        req.validateURI();
+        std::cout << "URI path : " << req.getUriPath() << std::endl;
+        for (auto queryParam : req.getUriQueryParams())
+            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
+    } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl << std::endl;
+    }
+    std::cout << "______________________________________________________________________________________\n";
+    try 
+    {
+        HttpRequest req;
+        req.setURI("/../../../path/to/resource ?name=John%20Doe&age=30");
+        req.validateURI();
+        std::cout << "URI path : " << req.getUriPath() << std::endl;
+        for (auto queryParam : req.getUriQueryParams())
+            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
+    } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl << std::endl;
+    }
+    std::cout << "______________________________________________________________________________________\n";
+    try 
+    {
+        HttpRequest req;
+        req.setURI("/path /to/resource? name=John%20Doe&age=30");
+        req.validateURI();
+        std::cout << "URI path : " << req.getUriPath() << std::endl;
+        for (auto queryParam : req.getUriQueryParams())
+            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
+    } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl << std::endl;
+    }
+    std::cout << "______________________________________________________________________________________\n";
+    try 
+    {
+        HttpRequest req;
+        req.setURI("http://example.com/path/to/resource?name=John%20Doe&age=30#nose");
+        req.validateURI();
+        std::cout << "URI path : " << req.getUriPath() << std::endl;
+        for (auto queryParam : req.getUriQueryParams())
+            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
+    } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl << std::endl;
+    }
+    std::cout << "______________________________________________________________________________________\n";
+    try 
+    {
+        HttpRequest req;
+        req.setURI("");
+        req.validateURI();
+        std::cout << "URI path : " << req.getUriPath() << std::endl;
+        for (auto queryParam : req.getUriQueryParams())
+            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
+    } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl << std::endl;
+    }
+    std::cout << "______________________________________________________________________________________\n";
+    try 
+    {
+        HttpRequest req;
+        req.setURI("/");
+        req.validateURI();
+        std::cout << "URI path : " << req.getUriPath() << std::endl;
+        for (auto queryParam : req.getUriQueryParams())
+            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
+    } catch (std::exception &e) {
+        std::cerr << e.what() << std::endl << std::endl;
+    }
+    std::cout << "______________________________________________________________________________________\n";
 }
