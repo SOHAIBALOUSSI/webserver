@@ -52,7 +52,7 @@ class HttpRequest
         std::string decode(std::string& encoded);
         std::string normalize(std::string& decoded);
         std::map<std::string, std::string> decodeAndParseQuery(std::string& query);
-        
+        bool    validateValue(std::string& value);
         
         //headers parsing
         size_t    parseHeaders();
