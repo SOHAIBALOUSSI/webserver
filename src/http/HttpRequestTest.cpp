@@ -96,7 +96,7 @@ TEST(HttpRequestParseTest, IncompleteBody) {
 
 
 
-                // THIS TEST FAILS nEEd TO fix Body Parsing
+// THIS TEST FAILS nEEd TO fix Body Parsing 
 TEST(HttpRequestParseTest, ChunkedTransferEncoding) {
     const char* buffer = "4\r\nThis \r\nA\r\nis a chunked\r\nC\r\nrequest.\r\n0\r\n\r\n";
     size_t bufferLen = strlen(buffer);
@@ -142,7 +142,6 @@ TEST(HttpRequestParseTest, CompleteRequest) {
     EXPECT_EQ(httpRequest.getBody(), ""); // No body expected
 }
 
-// Test Case: Valid Request Line
 TEST(HttpRequestParseTest, ValidRequestLine) {
     const char* buffer = "GET /path/to/resource HTTP/1.1\r\n";
     size_t bufferLen = strlen(buffer);
@@ -158,7 +157,6 @@ TEST(HttpRequestParseTest, ValidRequestLine) {
 }
 
 
-// Test fails in readline for some reason
 TEST(HttpRequestParseTest, IncrementalParsing) {
     HttpRequest httpRequest;
 
