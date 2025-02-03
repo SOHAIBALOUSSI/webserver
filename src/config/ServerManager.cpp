@@ -71,7 +71,7 @@ void    ServerManager::addListeningSockets(std::vector<Server*>& servers)
             int listeningSocket = (*socket)->getFd();
             socklen_t optval;
             socklen_t optlen = sizeof(optval);
-            if (getsockopt(listeningSocket, SOL_SOCKET, SO_ACCEPTCONN, &optval, &optlen) == -1)
+            if (getsockopt(listeningSocket, SOL_SOCKET, SO_ACCEPTCONN, &optval, &optlen) == -1) //remove before push
                 throw std::runtime_error("getsockopt failed: " + std::string(strerror(errno)));
             else 
             {
@@ -159,22 +159,39 @@ void    ServerManager::handleConnections(int listeningSocket)
 }
 
 
-std::string ServerManager::readRequest(int clientSocket) {
+void ServerManager::readRequest(Client& Client) {
     // request 7atha f client.request; muhim chuf kidir hhh
-    const size_t bufferSize = 8096;
-    char buffer[bufferSize];
-    std::string request;
+    const size_t bufferSize = 4096;
     int bytesReceived;
-    while ((bytesReceived = recv(clientSocket, buffer, bufferSize, 0)) > 0) {
+    std::string request;
+    while (true)
+    {
+        char buffer[bufferSize];
+        bytesReceived = recv(Client.getFd(), buffer, bufferSize, 0);
+        if (bytesReceived == -1) {
+            std::cerr << "ERROR: receiving data in client socket N" << Client.getFd() << "\n";
+            closeConnection(Client.getFd());
+            break ;
+        }
+        else if (bytesReceived == 0) {
+            closeConnection(Client.getFd());
+            break ;
+        }
         request.append(buffer, bytesReceived);
+        try {
+            bytesReceived = Client.getRequest().parse(request.c_str(), request.size());
+            if (bytesReceived > 0)
+                request.erase(0, bytesReceived);
+            if (Client.getRequest().isRequestComplete())
+                break ;
+        }
+        catch(const HttpIncompleteRequest& e) {
+            continue;
+        }
+        catch (...) {
+            throw ;
+        }
     }
-    if (bytesReceived == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        std::cerr << "ERROR: receiving data in client socket N" << clientSocket << "\n";
-        closeConnection(clientSocket);
-    } else if (bytesReceived == 0) {
-        closeConnection(clientSocket);
-    }
-    return request;
 }
 
 // here where u should parse the request
@@ -184,20 +201,14 @@ void ServerManager::handleRequest(int clientSocket) {
     if (Client != Clients.end())
     {
         // hna l3b kima bghiti
-        std::string request = readRequest(Client->second.getFd());
-        // process request
-        if (!request.empty()) {
-            try {
-                HttpRequest httpRequest(request);
-                requests.push(httpRequest);
-                modifyEpollEvent(clientSocket, EPOLLOUT);
-            } catch (const std::exception& e) {
-                sendErrorResponse(clientSocket, e.what());
-            }
+        try {
+            readRequest(Client->second);
+            modifyEpollEvent(clientSocket, EPOLLOUT);
+        } catch (const std::exception& e) {
+            sendErrorResponse(clientSocket, e.what());
         }
     }
     // just skip if client not found.
-
 }
 
 

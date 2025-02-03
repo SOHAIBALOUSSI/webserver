@@ -7,7 +7,6 @@
 class Server
 {
     private:
-        int server_fd;
         sockaddr_in server_addr;
         int port;
         std::vector<int> clientSockets;
@@ -15,9 +14,6 @@ class Server
         std::string host;
         Config serverConfig;
 
-        // void setupServer();
-        // void handleConnections();
-        // void handleHttpRequest(int client_fd);
         void shutdownServer();
 
     public:

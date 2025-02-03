@@ -23,21 +23,11 @@ class HttpRequest
         const char* _buffer;
         size_t _pos, _bufferLen;
         Config  configs;
-        enum parsingState
-        {
-            REQUESTLINE,
-            HEADERS,
-            BODY,
-            COMPLETE
-        };
-        parsingState state;
 
         std::string method, uri, uriPath, version, body;
         std::map<std::string, std::string> uriQueryParams;
         std::unordered_map<std::string, std::string> headers;
 
-        //main parsing
-        size_t    parse(const char* buffer, size_t bufferLen);
 
         //request-line parsing
         size_t    parseRequestLine();
@@ -62,19 +52,33 @@ class HttpRequest
         std::string readLine();
 
     public:
+        enum parsingState
+        {
+            REQUESTLINE,
+            HEADERS,
+            BODY,
+            COMPLETE
+        };
+        parsingState state;
         void    validateURI();
         HttpRequest();
         HttpRequest(const Config& _configs);
         HttpRequest(const std::string &request);
         ~HttpRequest();
 
-        std::string getMethod() const { return method; }
-        std::string getURI() const { return uri; }
-        std::string getVersion() const { return version; }
-        std::string getBody() const { return body; }
-        std::unordered_map<std::string, std::string> getHeaders() const { return headers; }
-        std::string getUriPath() const { return uriPath; }
-        std::map<std::string, std::string> getUriQueryParams() const { return uriQueryParams; }
-        parsingState getState() const { return state; }
+        std::string& getMethod() { return method; }
+        std::string& getURI() { return uri; }
+        std::string& getVersion() { return version; }
+        std::string& getBody() { return body; }
+        std::unordered_map<std::string, std::string>& getHeaders() { return headers; }
+        std::string& getUriPath() { return uriPath; }
+        std::map<std::string, std::string>& getUriQueryParams() { return uriQueryParams; }
+        parsingState& getState() { return state; }
         void    setURI(const std::string& _uri) { uri = _uri; };
+        bool    isRequestComplete();
+        
+        
+        //main parsing
+        size_t    parse(const char* buffer, size_t bufferLen);
+
 };

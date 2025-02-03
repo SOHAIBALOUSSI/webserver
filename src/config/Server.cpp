@@ -35,7 +35,6 @@ int Server::acceptConnection(int listeningSocket)
     if (clientSocket == -1)
         throw std::runtime_error("ERROR:  accepting connection: " + std::string(strerror(errno)));
     clientSockets.push_back(clientSocket); // idk if we still need this
-
     std::clog << "LOG: New client connected, client socket N" << clientSocket << "\n";
     return (clientSocket);
 }
@@ -59,7 +58,6 @@ void Server::shutdownServer()
         delete *socket;
     for (size_t i = 0; i < clientSockets.size(); ++i)
         close(clientSockets[i]);
-    close(server_fd);
     std::clog << "LOG: Server shut down.\n";
 }
 

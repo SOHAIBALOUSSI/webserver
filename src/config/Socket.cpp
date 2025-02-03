@@ -8,13 +8,9 @@ void  Socket::create()
   if (fd == -1)
       throw std::runtime_error("ERROR:  creating socket: " + std::string(strerror(errno)));
   int opt = 1;
-  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
-    throw std::runtime_error("ERROR:  setting socket opt: " + std::string(strerror(errno)));
-  opt = 1;
-  if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) == -1)
-    throw std::runtime_error("ERROR:  setting socket opt: " + std::string(strerror(errno)));
-  opt = 1;
-  if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) == -1)
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1
+    || setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) == -1
+    || setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) == -1)
     throw std::runtime_error("ERROR:  setting socket opt: " + std::string(strerror(errno)));
 }
 
@@ -40,8 +36,6 @@ int  Socket::accept()
   return (client_fd);
 }
 
-
-
 int Socket::getFd( void ) const
 {
   return (fd);
@@ -53,6 +47,5 @@ Socket::~Socket()
   {
     close(fd);
     std::cerr << "LOG: closing file descriptor " << fd << '\n';
-    fd = -1;
   }
 }

@@ -15,6 +15,6 @@ class Client {
         Client(int client_fd);
 
         int getFd() const { return client_fd; }
-        HttpRequest getRequest() const { return request; }
+        HttpRequest& getRequest() const { return request; }
         std::string getResponse() const { return response; }
 };

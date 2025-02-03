@@ -48,16 +48,18 @@ HttpRequest::HttpRequest(const std::string &request)
 }
 
 
-HttpRequest::HttpRequest() {}
+HttpRequest::HttpRequest() : state(REQUESTLINE), _pos(0), _bufferLen(0) {}
 
 HttpRequest::~HttpRequest() {}
 
 HttpRequest::HttpRequest(const Config& _configs) : state(REQUESTLINE), _pos(0), _bufferLen(0), configs(_configs) {}
 
-size_t    HttpRequest::parse(const char* _buffer, size_t bufferLen)
+size_t    HttpRequest::parse(const char* buffer, size_t bufferLen)
 {
     this->_bufferLen = bufferLen;
+    this->_buffer = buffer;
     size_t bytesReceived = 0;
+
     try
     {
         switch (state)
@@ -73,11 +75,11 @@ size_t    HttpRequest::parse(const char* _buffer, size_t bufferLen)
                 break ;
             case COMPLETE : 
                 return 0;
-        }
+        }   
     }
-    catch (const HttpIncompleteRequest&)
+    catch(const HttpIncompleteRequest& e)
     {
-        return 0;
+        return (0);
     }
     return (bytesReceived);
 }
@@ -86,6 +88,8 @@ size_t    HttpRequest::parse(const char* _buffer, size_t bufferLen)
 size_t    HttpRequest::parseRequestLine()
 {
     std::string line = readLine();
+    if (line.empty())
+        throw (HttpIncompleteRequest());
     size_t firstSpace = line.find(' ');
     size_t secondSpace = line.find(' ', firstSpace + 1);
     if (firstSpace == std::string::npos || secondSpace == std::string::npos)
@@ -105,7 +109,7 @@ size_t    HttpRequest::parseRequestLine()
 void    HttpRequest::validateMethod()
 {
     if (method != "GET" && method != "DELETE" && method != "POST")
-        throw (HttpRequestError("HTTP/1.1 405 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 19\r\n\r\nMethod Not Allowed"));
+        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 18\r\n\r\nMalformed request line"));
 }
 
 void    HttpRequest::validateURI()
@@ -147,7 +151,7 @@ std::map<std::string, std::string> HttpRequest::decodeAndParseQuery(std::string&
         value = (pos != std::string::npos ? queryParam.substr(pos + 1) : "");
         if (value.find('#') != std::string::npos)
             value.erase(value.find('#'));
-        queryParams[key] = value;
+        queryParams[key] = value;//decode this
     }
     return (queryParams);
 }
@@ -239,7 +243,7 @@ size_t    HttpRequest::parseHeaders()
         std::string key = toLowerCase(keyValue.first);
         std::string value = strTrim(keyValue.second);
         if (key.empty() || key.find_first_of(" \t") != std::string::npos || key.find_last_of(" \t") != std::string::npos)
-            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed Field Name"));
+            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
         if (headers.find(key) != headers.end())
             headers[key] += "," + value;
         else
@@ -250,27 +254,64 @@ size_t    HttpRequest::parseHeaders()
     return (_pos - startPos);
 }
 
-bool    HttpRequest::validateValue(std::string& value)
-{
-    const std::string allowed = "!#$%&\'\"*+-.^_`|~";
-    return (value.find_first_of(allowed) != std::string::npos);
-}
-
 //curl -H "Tranfert-Encoding: chunked" -F "filename=/path" 127.0.0.1:8080 (for testing POST)
 size_t    HttpRequest::parseBody()
 {
+    if (!headers.count("host"))
+        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
+    size_t startPos = _pos;
+    if (headers.count("transfer-encoding") && toLowerCase(headers["transfer-encoding"]) == "chunked")
+        return (parseChunkedBody());
+    else if (headers.count("content-length"))
+    {
+        int contentLength = std::atoi(headers["content-length"].c_str());
+        if (_bufferLen - _pos < contentLength)
+        {
+            body.append(_buffer + _pos, _bufferLen - _pos);
+            _pos += (_bufferLen - _pos);
+            throw (HttpIncompleteRequest());
+        }
+        body.append(_buffer + _pos, contentLength);
+        _pos += contentLength;
+    }
     state = COMPLETE;
-
+    return (_pos - startPos);
 }
 
 size_t    HttpRequest::parseChunkedBody()
 {
-    
+    size_t startPos = _pos;
+    while (true)
+    {
+        std::string line = readLine();
+        // if (line.empty())
+        //     throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
+        int chunkSize = std::strtoll(line.c_str(), NULL, 16);
+        if (chunkSize < 0)
+            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
+        else if (chunkSize == 0)
+        {
+            readLine();
+            _pos += 2;
+            break ;
+        }
+        else if (_bufferLen - _pos < chunkSize + 2)
+        {
+            body.append(_buffer + _pos, _bufferLen - _pos);
+            _pos += (_bufferLen - _pos);
+            throw (HttpIncompleteRequest());
+        }
+        body.append(_buffer + _pos, chunkSize);
+        _pos += chunkSize + 2;
+    }
+    state = COMPLETE;
+    return (_pos - startPos);
 }
 
 std::string HttpRequest::readLine()
 {
     size_t start = _pos;
+    size_t rollBack = 0;
     while (_pos < _bufferLen)
     {
         if (_buffer[_pos] == '\r' && _pos + 1 < _bufferLen && _buffer[_pos + 1] == '\n')
@@ -280,94 +321,21 @@ std::string HttpRequest::readLine()
             return (line);
         }
         _pos++;
+        rollBack++;
     }
+    _pos -= rollBack;
     throw (HttpIncompleteRequest());
 }
 
-std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string& uri, char delim)
+std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string& toSplit, char delim)
 {
-    size_t queryStart = uri.find(delim);
-    std::string path = uri.substr(0, queryStart);
-    std::string query = (queryStart != std::string::npos ? uri.substr(queryStart + 1) : "");
-    return (std::make_pair(path, query));
+    size_t keyValue = toSplit.find(delim);
+    std::string key = toSplit.substr(0, keyValue);
+    std::string value = (keyValue != std::string::npos ? toSplit.substr(keyValue + 1) : "");
+    return (std::make_pair(key, value));
 }
 
-
-
-//UNIT TESTING URI PARSING
-int main(int ac, char **av)
+bool    HttpRequest::isRequestComplete()
 {
-    std::cout << "______________________________________________________________________________________\n";
-    try 
-    {
-        HttpRequest req;
-        req.setURI("////path/to/resource?name=John%20Doe&age=30");
-        req.validateURI();
-        std::cout << "URI path : " << req.getUriPath() << std::endl;
-        for (auto queryParam : req.getUriQueryParams())
-            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl << std::endl;
-    }
-    std::cout << "______________________________________________________________________________________\n";
-    try 
-    {
-        HttpRequest req;
-        req.setURI("/../../../path/to/resource?name=John%20Doe&age=30");
-        req.validateURI();
-        std::cout << "URI path : " << req.getUriPath() << std::endl;
-        for (auto queryParam : req.getUriQueryParams())
-            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl << std::endl;
-    }
-    std::cout << "______________________________________________________________________________________\n";
-    try 
-    {
-        HttpRequest req;
-        req.setURI("/path/to/resource?name=John%20Doe&age=30");
-        req.validateURI();
-        std::cout << "URI path : " << req.getUriPath() << std::endl;
-        for (auto queryParam : req.getUriQueryParams())
-            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl << std::endl;
-    }
-    std::cout << "______________________________________________________________________________________\n";
-    try 
-    {
-        HttpRequest req;
-        req.setURI("http://user:password@localhost:8080/path/to/resource?name=John%20Doe&age=30#nose");
-        req.validateURI();
-        std::cout << "URI path : " << req.getUriPath() << std::endl;
-        for (auto queryParam : req.getUriQueryParams())
-            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl << std::endl;
-    }
-    std::cout << "______________________________________________________________________________________\n";
-    try 
-    {
-        HttpRequest req;
-        req.setURI("..");
-        req.validateURI();
-        std::cout << "URI path : " << req.getUriPath() << std::endl;
-        for (auto queryParam : req.getUriQueryParams())
-            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl << std::endl;
-    }
-    std::cout << "______________________________________________________________________________________\n";
-    try 
-    {
-        HttpRequest req;
-        req.setURI("/../../etc/passwd");
-        req.validateURI();
-        std::cout << "URI path : " << req.getUriPath() << std::endl;
-        for (auto queryParam : req.getUriQueryParams())
-            std::cout << "key: " << queryParam.first << ", value: " << queryParam.second << std::endl; 
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl << std::endl;
-    }
-    std::cout << "______________________________________________________________________________________\n";
+    return (state == COMPLETE);
 }

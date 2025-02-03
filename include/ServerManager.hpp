@@ -22,7 +22,7 @@
             void           handleEvent(const epoll_event& event);
             void           handleConnections(int listeningSocket);
             void           handleRequest(int clientSocket);
-            std::string    readRequest(int clientSocket);
+            void           readRequest(Client& Client);
             void           sendResponse(int clientSocket);
 
             void        processRequest(int clientSocket, const std::string& request);
