@@ -102,7 +102,7 @@ void    ServerManager::addToEpoll(int clientSocket)
     setNonBlocking(clientSocket);
     struct epoll_event event;
     memset(&event, 0, sizeof(event));
-    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    event.events = EPOLLIN | EPOLLOUT;
     event.data.fd = clientSocket;
     if (epoll_ctl(epollFd, EPOLL_CTL_ADD, clientSocket, &event) == -1)
         throw std::runtime_error("ERROR: Adding socket to epoll: " + std::string(strerror(errno)));
@@ -112,6 +112,7 @@ void ServerManager::closeConnection(int fd) {
     Server* server = findServerBySocket(fd);
     if (server) {
         server->closeConnection(fd);
+        Clients.erase(fd);
         epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, NULL);
     }
 }
@@ -140,6 +141,7 @@ void ServerManager::sendResponse(int clientSocket) {
     } else {
         modifyEpollEvent(clientSocket, EPOLLIN);
     }
+
 }
 
 
@@ -160,18 +162,12 @@ void    ServerManager::handleConnections(int listeningSocket)
 
 
 void ServerManager::readRequest(Client& Client) {
-    // request 7atha f client.request; muhim chuf kidir hhh
     const size_t bufferSize = 4096;
     char buffer[bufferSize];
     int bytesReceived;
 
     bytesReceived = recv(Client.getFd(), buffer, bufferSize, 0);
-    if (bytesReceived == -1) {
-        std::cerr << "ERROR: receiving data in client socket N" << Client.getFd() << "\n";
-        closeConnection(Client.getFd());
-        return ;
-    }
-    else if (bytesReceived == 0) {
+    if (bytesReceived == -1 || bytesReceived == 0) {
         closeConnection(Client.getFd());
         return ;
     }
@@ -180,7 +176,6 @@ void ServerManager::readRequest(Client& Client) {
     Client.getRequest().parse(request.c_str(), request.size());
 }
 
-// here where u should parse the request
 void ServerManager::handleRequest(int clientSocket) {
     std::map<int, Client>::iterator Client = Clients.find(clientSocket);
 
@@ -189,11 +184,12 @@ void ServerManager::handleRequest(int clientSocket) {
         // hna l3b kima bghiti
         try {
             readRequest(Client->second);
+            if (Client->second.getRequest().isRequestComplete())
+                modifyEpollEvent(clientSocket, EPOLLOUT);
         } catch (const std::exception& e) {
             sendErrorResponse(clientSocket, e.what());
         }
     }
-    // just skip if client not found.
 }
 
 
