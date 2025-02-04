@@ -54,6 +54,24 @@ HttpRequest::~HttpRequest() {}
 
 HttpRequest::HttpRequest(const Config& _configs) : state(REQUESTLINE), _pos(0), _bufferLen(0), configs(_configs) {}
 
+/*
+for i in {1..100}; do
+  curl -v GET 127.0.0.1:4383
+done
+
+
+for i in {1..100}; do
+  curl -v GET 127.0.0.1:4383 &
+done
+wait
+
+for i in {1..100}; do
+  curl -v -X POST -d "param1=value1&param2=value2" 127.0.0.1:4383 &
+done
+wait
+*/
+
+
 size_t    HttpRequest::parse(const char* buffer, size_t bufferLen)
 {
     this->_bufferLen = bufferLen;
@@ -94,10 +112,13 @@ size_t    HttpRequest::parseRequestLine()
     uri = line.substr(firstSpace + 1, secondSpace - firstSpace - 1);
     version = line.substr(secondSpace + 1);
     std::clog << "DEBUG: Parsing Request-line...\n";
+    std::clog << "DEBUG: Parsing Method: " << method << "\n";
     validateMethod();
     std::clog << "DEBUG: Validating method: OK\n";
+    std::clog << "DEBUG: Parsing URI: " << uri << "\n";
     validateURI();
     std::clog << "DEBUG: Validating URI: OK\n";
+    std::clog << "DEBUG: Parsing Version: " << version << "\n";
     validateVersion();
     std::clog << "DEBUG: Validating VERSION: OK\n";
     state = HEADERS;
@@ -244,7 +265,8 @@ size_t    HttpRequest::parseHeaders()
         if (headers.find(key) != headers.end())
             headers[key] += "," + value;
         else
-            headers[key] = value;   
+            headers[key] = value;
+        std::clog << "DEBUG: " << key << ": " << value << "\n";
         line = readLine();
     }
     state = BODY;
@@ -292,9 +314,7 @@ size_t    HttpRequest::parseChunkedBody()
     while (true)
     {
         std::string line = readLine();
-        // if (line.empty())
-        //     throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
-        int chunkSize = std::strtoll(line.c_str(), NULL, 16);
+        int chunkSize = _16_to_10(line);
         std::clog << "DEBUG: Chunk size = " << chunkSize << "\n";
         if (chunkSize < 0)
             throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
@@ -304,15 +324,17 @@ size_t    HttpRequest::parseChunkedBody()
             readLine();
             break ;
         }
-        else if (_bufferLen - _pos < chunkSize + 2)
+        if (_bufferLen - _pos < chunkSize + 2)
         {
             std::clog << "DEBUG: Appended " << _bufferLen - _pos << " bytes to the body, " << chunkSize - (_bufferLen - bodyStart) << "bytes to go\n";
             body.append(_buffer + _pos, _bufferLen - _pos);
+            std::clog << "DEBUG: body : { " << body << " }\n";
             _pos += (_bufferLen - _pos);
             throw (HttpIncompleteRequest());
         }
         std::clog << "DEBUG: Appended " << chunkSize << " bytes to the body.\n";
         body.append(_buffer + _pos, chunkSize);
+        std::clog << "DEBUG: body : { " << body << " }\n";
         _pos += chunkSize + 2;
     }
     state = COMPLETE;
