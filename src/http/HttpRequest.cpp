@@ -62,24 +62,18 @@ size_t    HttpRequest::parse(const char* buffer, size_t bufferLen)
 
     try
     {
-        switch (state)
-        {
-            case REQUESTLINE : 
-                bytesReceived = parseRequestLine(); 
-                break ;
-            case HEADERS : 
-                bytesReceived = parseHeaders();
-                break ;
-            case BODY : 
-                bytesReceived = parseBody(); 
-                break ;
-            case COMPLETE : 
-                return 0;
-        }   
+        if (state == REQUESTLINE)
+            bytesReceived += parseRequestLine(); 
+        if (state == HEADERS) 
+            bytesReceived += parseHeaders();
+        if (state == BODY) 
+            bytesReceived += parseBody(); 
+        if (state == COMPLETE) 
+            return 0;
     }
     catch(const HttpIncompleteRequest& e)
     {
-        return (0);
+        return (bytesReceived);
     }
     return (bytesReceived);
 }
@@ -132,9 +126,7 @@ void    HttpRequest::validateURI()
         else
             uriPath = "/";
     }
-    std::cout << "Before decoding and normalizing: " << uriPath << "\n";
     uriPath = decodeAndNormalize();
-    std::cout << "After decoding and normalizing: " << uriPath << "\n";
     if (!query.empty())
         uriQueryParams = decodeAndParseQuery(query);
 }
@@ -228,7 +220,7 @@ bool    HttpRequest::isURIchar(char c)
 
 void    HttpRequest::validateVersion()
 {
-    if (version.empty())
+    if (version.empty() || version != "HTTP/1.1")
         throw (HttpRequestError("HTTP/1.1 505 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nVersion not supported"));
 }
 
@@ -247,18 +239,19 @@ size_t    HttpRequest::parseHeaders()
         if (headers.find(key) != headers.end())
             headers[key] += "," + value;
         else
-            headers[key] = value;
+            headers[key] = value;   
         line = readLine();
     }
     state = BODY;
+    if (!headers.count("host"))
+        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
+    bodyStart = _pos;
     return (_pos - startPos);
 }
 
 //curl -H "Tranfert-Encoding: chunked" -F "filename=/path" 127.0.0.1:8080 (for testing POST)
 size_t    HttpRequest::parseBody()
 {
-    if (!headers.count("host"))
-        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
     size_t startPos = _pos;
     if (headers.count("transfer-encoding") && toLowerCase(headers["transfer-encoding"]) == "chunked")
         return (parseChunkedBody());
@@ -268,7 +261,12 @@ size_t    HttpRequest::parseBody()
         if (_bufferLen - _pos < contentLength)
         {
             body.append(_buffer + _pos, _bufferLen - _pos);
-            _pos += (_bufferLen - _pos);
+            _pos = _bufferLen;
+            if (_bufferLen - bodyStart == contentLength)
+            {
+                state = COMPLETE;
+                return (_pos - startPos);
+            }
             throw (HttpIncompleteRequest());
         }
         body.append(_buffer + _pos, contentLength);
@@ -292,7 +290,6 @@ size_t    HttpRequest::parseChunkedBody()
         else if (chunkSize == 0)
         {
             readLine();
-            _pos += 2;
             break ;
         }
         else if (_bufferLen - _pos < chunkSize + 2)
@@ -311,7 +308,6 @@ size_t    HttpRequest::parseChunkedBody()
 std::string HttpRequest::readLine()
 {
     size_t start = _pos;
-    size_t rollBack = 0;
     while (_pos < _bufferLen)
     {
         if (_buffer[_pos] == '\r' && _pos + 1 < _bufferLen && _buffer[_pos + 1] == '\n')
@@ -321,9 +317,8 @@ std::string HttpRequest::readLine()
             return (line);
         }
         _pos++;
-        rollBack++;
     }
-    _pos -= rollBack;
+    _pos = start;
     throw (HttpIncompleteRequest());
 }
 

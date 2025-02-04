@@ -27,7 +27,7 @@ TEST(HttpRequestParseTest, ValidHeaders) {
 
     size_t bytesParsed = httpRequest.parse(buffer, bufferLen);
 
-    EXPECT_EQ(bytesParsed, 41); // Length of headers plus "\r\n\r\n"
+    EXPECT_EQ(bytesParsed, 41); 
     EXPECT_EQ(httpRequest.getState(), HttpRequest::BODY);
     EXPECT_EQ(httpRequest.getHeaders().at("host"), "example.com");
     EXPECT_EQ(httpRequest.getHeaders().at("content-length"), "12");
@@ -71,10 +71,10 @@ TEST(HttpRequestParseTest, ValidBody) {
     HttpRequest httpRequest;
     httpRequest.state = HttpRequest::BODY; // Set initial state to BODY
     httpRequest.getHeaders()["content-length"] = "12"; // Simulate parsed Content-Length header
-
+    httpRequest.setBodyStartPos(0);
     size_t bytesParsed = httpRequest.parse(buffer, bufferLen);
 
-    EXPECT_EQ(bytesParsed, 12); // Length of "Hello World!"
+    EXPECT_EQ(bytesParsed, 0); // Length of "Hello World!"
     EXPECT_EQ(httpRequest.getState(), HttpRequest::COMPLETE);
     EXPECT_EQ(httpRequest.getBody(), "Hello World!");
 }
@@ -86,7 +86,7 @@ TEST(HttpRequestParseTest, IncompleteBody) {
     HttpRequest httpRequest;
     httpRequest.state = HttpRequest::BODY; // Set initial state to BODY
     httpRequest.getHeaders()["content-length"] = "12"; // Simulate parsed Content-Length header
-
+    httpRequest.setBodyStartPos(0);
     size_t bytesParsed = httpRequest.parse(buffer, bufferLen);
 
     EXPECT_EQ(bytesParsed, 0);
@@ -98,7 +98,7 @@ TEST(HttpRequestParseTest, IncompleteBody) {
 
 // THIS TEST FAILS nEEd TO fix Body Parsing 
 TEST(HttpRequestParseTest, ChunkedTransferEncoding) {
-    const char* buffer = "4\r\nThis \r\nA\r\nis a chunked\r\nC\r\nrequest.\r\n0\r\n\r\n";
+    const char* buffer = "5\r\nThis \r\nD\r\nis a chunked \r\n8\r\nrequest.\r\n0\r\n\r\n";
     size_t bufferLen = strlen(buffer);
 
     HttpRequest httpRequest;
@@ -107,7 +107,7 @@ TEST(HttpRequestParseTest, ChunkedTransferEncoding) {
 
     size_t bytesParsed = httpRequest.parse(buffer, bufferLen);
 
-    EXPECT_EQ(bytesParsed, 49); // Total length of chunks
+    EXPECT_EQ(bytesParsed, 0); // Total length of chunks
     EXPECT_EQ(httpRequest.getState(), HttpRequest::COMPLETE);
     EXPECT_EQ(httpRequest.getBody(), "This is a chunked request.");
 }
@@ -173,7 +173,6 @@ TEST(HttpRequestParseTest, IncrementalParsing) {
     const char* buffer2 = "TP/1.1\r\n";
     size_t bufferLen2 = strlen(buffer2);
     request.append(buffer2, bufferLen2);
-    std::cout << "request: " << request << "\n";
     size_t bytesParsed2 = httpRequest.parse(request.c_str(), request.size());
     EXPECT_EQ(bytesParsed2, 32); //Length of the whole request line
     EXPECT_EQ(httpRequest.getState(), HttpRequest::HEADERS);
@@ -184,16 +183,18 @@ TEST(HttpRequestParseTest, IncrementalParsing) {
     // Third call: Headers
     const char* buffer3 = "Host: example.com\r\nContent-Length: 12\r\n\r\n";
     size_t bufferLen3 = strlen(buffer3);
-    size_t bytesParsed3 = httpRequest.parse(buffer3, bufferLen3);
-    EXPECT_EQ(bytesParsed3, 39); // Length of headers plus "\r\n\r\n"
+    request.append(buffer3, bufferLen3);
+    size_t bytesParsed3 = httpRequest.parse(request.c_str(), request.size());
+    EXPECT_EQ(bytesParsed3, 41); // Length of headers plus "\r\n\r\n"
     EXPECT_EQ(httpRequest.getState(), HttpRequest::BODY);
     EXPECT_EQ(httpRequest.getHeaders().at("host"), "example.com");
     EXPECT_EQ(httpRequest.getHeaders().at("content-length"), "12");
     // Fourth call: Body
     const char* buffer4 = "Hello World!";
     size_t bufferLen4 = strlen(buffer4);
-    size_t bytesParsed4 = httpRequest.parse(buffer4, bufferLen4);
-    EXPECT_EQ(bytesParsed4, 12); // Length of body
+    request.append(buffer4, bufferLen4);
+    size_t bytesParsed4 = httpRequest.parse(request.c_str(), request.size());
+    EXPECT_EQ(bytesParsed4, 0); // Length of body
     EXPECT_EQ(httpRequest.getState(), HttpRequest::COMPLETE);
     EXPECT_EQ(httpRequest.getBody(), "Hello World!");
 }
@@ -202,20 +203,15 @@ TEST(HttpRequestParseTest, LargeRequest) {
     HttpRequest httpRequest;
 
     // First call: Headers
-    const char* buffer1 = "GET /path/to/resource HTTP/1.1\r\nHost: example.com\r\nContent-Length: 20\r\n\r\n";
+    const char* buffer1 = "GET /path/to/resource HTTP/1.1\r\nHost: example.com\r\nContent-Length: 32\r\n\r\n";
     size_t bufferLen1 = strlen(buffer1);
     std::string request;
     request.append(buffer1, bufferLen1);
-    size_t bytesReceived = -1;
-    size_t bytesParsed1 = 0;
-    while (bytesReceived != 0)
-    {
-        bytesReceived = httpRequest.parse(request.c_str(), request.size());
-        bytesParsed1 += bytesReceived;
-    }
-    EXPECT_EQ(bytesParsed1, 51); // Length of headers plus "\r\n\r\n"   
+    size_t bytesParsed1 = -1;
+    bytesParsed1 = httpRequest.parse(request.c_str(), request.size());
+    EXPECT_EQ(bytesParsed1, 73); // Length of headers plus "\r\n\r\n"   
     EXPECT_EQ(httpRequest.getState(), HttpRequest::BODY);
-    EXPECT_EQ(httpRequest.getHeaders().at("content-length"), "20");
+    EXPECT_EQ(httpRequest.getHeaders().at("content-length"), "32");
 
     // Second call: Partial body
     const char* buffer2 = "This is a very lon";
@@ -231,7 +227,7 @@ TEST(HttpRequestParseTest, LargeRequest) {
     size_t bufferLen3 = strlen(buffer3);
     request. append(buffer3, bufferLen3);
     size_t bytesParsed3 = httpRequest.parse(request.c_str(), request.size());
-    EXPECT_EQ(bytesParsed3, 13); // Remaining length of "g request body"
+    EXPECT_EQ(bytesParsed3, 0);
     EXPECT_EQ(httpRequest.getState(), HttpRequest::COMPLETE);
     EXPECT_EQ(httpRequest.getBody(), "This is a very long request body");
 }

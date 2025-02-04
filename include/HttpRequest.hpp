@@ -21,10 +21,10 @@ class HttpRequest
 {
     private:
         const char* _buffer;
-        size_t _pos, _bufferLen;
+        size_t _pos, _bufferLen, bodyStart;
         Config  configs;
 
-        std::string method, uri, uriPath, version, body;
+        std::string method, uri, uriPath, version, body, request;
         std::map<std::string, std::string> uriQueryParams;
         std::unordered_map<std::string, std::string> headers;
 
@@ -74,10 +74,11 @@ class HttpRequest
         std::string& getUriPath() { return uriPath; }
         std::map<std::string, std::string>& getUriQueryParams() { return uriQueryParams; }
         parsingState& getState() { return state; }
-        void    setURI(const std::string& _uri) { uri = _uri; };
+        void    setURI(const std::string& _uri) { uri = _uri; }
         bool    isRequestComplete();
         
-        
+        void  setBodyStartPos(size_t value) { bodyStart = value; }
+        std::string& getRequestBuffer() { return request; }
         //main parsing
         size_t    parse(const char* buffer, size_t bufferLen);
 

@@ -162,36 +162,28 @@ void    ServerManager::handleConnections(int listeningSocket)
 void ServerManager::readRequest(Client& Client) {
     // request 7atha f client.request; muhim chuf kidir hhh
     const size_t bufferSize = 4096;
+    char buffer[bufferSize];
     int bytesReceived;
-    std::string request;
-    while (true)
-    {
-        char buffer[bufferSize];
-        bytesReceived = recv(Client.getFd(), buffer, bufferSize, 0);
-        if (bytesReceived == -1) {
-            std::cerr << "ERROR: receiving data in client socket N" << Client.getFd() << "\n";
-            closeConnection(Client.getFd());
-            break ;
-        }
-        else if (bytesReceived == 0) {
-            closeConnection(Client.getFd());
-            break ;
-        }
-        request.append(buffer, bytesReceived);
-        try {
-            bytesReceived = Client.getRequest().parse(request.c_str(), request.size());
-            if (bytesReceived > 0)
-                request.erase(0, bytesReceived);
-            if (Client.getRequest().isRequestComplete())
-                break ;
-        }
-        catch(const HttpIncompleteRequest& e) {
-            continue;
-        }
-        catch (...) {
-            throw ;
-        }
+
+    bytesReceived = recv(Client.getFd(), buffer, bufferSize, 0);
+    if (bytesReceived == -1) {
+        std::cerr << "ERROR: receiving data in client socket N" << Client.getFd() << "\n";
+        closeConnection(Client.getFd());
+        return ;
     }
+    else if (bytesReceived == 0) {
+        closeConnection(Client.getFd());
+        return ;
+    }
+    Client.getRequest().getRequestBuffer().append(buffer, bytesReceived);
+
+    std::string request;
+    request = Client.getRequest().getRequestBuffer();
+    bytesReceived = Client.getRequest().parse(request.c_str(), request.size());
+    if (bytesReceived > 0)
+        request.erase(0, bytesReceived);
+    if (Client.getRequest().isRequestComplete())
+        return ;
 }
 
 // here where u should parse the request
