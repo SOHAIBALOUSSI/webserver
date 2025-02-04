@@ -176,14 +176,8 @@ void ServerManager::readRequest(Client& Client) {
         return ;
     }
     Client.getRequest().getRequestBuffer().append(buffer, bytesReceived);
-
-    std::string request;
-    request = Client.getRequest().getRequestBuffer();
-    bytesReceived = Client.getRequest().parse(request.c_str(), request.size());
-    if (bytesReceived > 0)
-        request.erase(0, bytesReceived);
-    if (Client.getRequest().isRequestComplete())
-        return ;
+    std::string& request = Client.getRequest().getRequestBuffer();
+    Client.getRequest().parse(request.c_str(), request.size());
 }
 
 // here where u should parse the request
@@ -195,7 +189,6 @@ void ServerManager::handleRequest(int clientSocket) {
         // hna l3b kima bghiti
         try {
             readRequest(Client->second);
-            modifyEpollEvent(clientSocket, EPOLLOUT);
         } catch (const std::exception& e) {
             sendErrorResponse(clientSocket, e.what());
         }
