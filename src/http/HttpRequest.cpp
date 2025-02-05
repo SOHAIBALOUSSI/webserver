@@ -288,53 +288,40 @@ size_t    HttpRequest::parseBody()
         int contentLength = std::atoi(headers["content-length"].c_str());
         std::clog << "DEBUG: Content-length = " << contentLength << "\n";
         if (_bufferLen - _pos < contentLength)
-        {
-            std::clog << "DEBUG: Appended " << _bufferLen - _pos << " bytes to the body, " << contentLength - (_bufferLen - bodyStart) << "bytes to go\n";
-            body.append(_buffer + _pos, _bufferLen - _pos);
-            _pos = _bufferLen;
-            if (_bufferLen - bodyStart == contentLength)
-            {
-                state = COMPLETE;
-                return (_pos - startPos);
-            }
             throw (HttpIncompleteRequest());
-        }
         std::clog << "DEBUG: Appended " << contentLength << " bytes to the body.\n";
         body.append(_buffer + _pos, contentLength);
         _pos += contentLength;
     }
     state = COMPLETE;
+    std::cout << "FULL PARSED ReQUEST : \n"
+            << "          -method: " << method 
+            <<"\n          -uri: " << uri
+            <<"\n          -version: " << version
+            <<"\n          -headers:\n";
+    for (auto header : headers)
+        std::cout << "              -" << header.first << ": " << header.second << "\n";
+    std::cout << "          -body: \n{" << body << "\n}\n";   
     return (_pos - startPos);
 }
 
 size_t    HttpRequest::parseChunkedBody()
 {
     size_t startPos = _pos;
-    std::clog << "DEBUG: Parsing Chunked Body...\n";
     while (true)
     {
         std::string line = readLine();
         int chunkSize = _16_to_10(line);
-        std::clog << "DEBUG: Chunk size = " << chunkSize << "\n";
         if (chunkSize < 0)
             throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
         else if (chunkSize == 0)
         {
-            std::clog << "DEBUG: Received the final chunk.\n";
             readLine();
             break ;
         }
         if (_bufferLen - _pos < chunkSize + 2)
-        {
-            std::clog << "DEBUG: Appended " << _bufferLen - _pos << " bytes to the body, " << chunkSize - (_bufferLen - bodyStart) << "bytes to go\n";
-            body.append(_buffer + _pos, _bufferLen - _pos);
-            std::clog << "DEBUG: body : { " << body << " }\n";
-            _pos += (_bufferLen - _pos);
             throw (HttpIncompleteRequest());
-        }
-        std::clog << "DEBUG: Appended " << chunkSize << " bytes to the body.\n";
         body.append(_buffer + _pos, chunkSize);
-        std::clog << "DEBUG: body : { " << body << " }\n";
         _pos += chunkSize + 2;
     }
     state = COMPLETE;

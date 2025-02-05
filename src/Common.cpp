@@ -46,8 +46,8 @@ int _16_to_10(std::string str)
   for (int i = 0; i < str.size(); i++)
   {
     if (!isHexDigit(str[i]))
-      break ;
-    result += result * 16 + hexToValue(str[i]);
+      return -1;
+    result = result * 16 + hexToValue(str[i]);
   }
   return (result);
 }
