@@ -41,13 +41,15 @@ int hexToValue(char c)
 
 int _16_to_10(std::string str)
 {
+  if (str.empty())
+    return (-1);
   int result = 0;
-  str = strTrim(str);
-  for (int i = 0; i < str.size(); i++)
+  std::string trimmed = strTrim(str);
+  for (int i = 0; i < trimmed.size(); i++)
   {
-    if (!isHexDigit(str[i]))
+    if (!isHexDigit(trimmed[i]))
       return -1;
-    result = result * 16 + hexToValue(str[i]);
+    result = result * 16 + hexToValue(trimmed[i]);
   }
   return (result);
 }

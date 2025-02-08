@@ -111,16 +111,9 @@ size_t    HttpRequest::parseRequestLine()
     method = line.substr(0, firstSpace);
     uri = line.substr(firstSpace + 1, secondSpace - firstSpace - 1);
     version = line.substr(secondSpace + 1);
-    std::clog << "DEBUG: Parsing Request-line...\n";
-    std::clog << "DEBUG: Parsing Method: " << method << "\n";
     validateMethod();
-    std::clog << "DEBUG: Validating method: OK\n";
-    std::clog << "DEBUG: Parsing URI: " << uri << "\n";
     validateURI();
-    std::clog << "DEBUG: Validating URI: OK\n";
-    std::clog << "DEBUG: Parsing Version: " << version << "\n";
     validateVersion();
-    std::clog << "DEBUG: Validating VERSION: OK\n";
     state = HEADERS;
     return (line.size() + 2);
 }
@@ -280,28 +273,21 @@ size_t    HttpRequest::parseHeaders()
 size_t    HttpRequest::parseBody()
 {
     size_t startPos = _pos;
-    std::clog << "DEBUG: Parsing Body...\n";
-    if (headers.count("transfer-encoding") && toLowerCase(headers["transfer-encoding"]) == "chunked")
+    if (headers.count("transfer-encoding") && toLowerCase(headers["transfer-encoding"]).find("chunked") != std::string::npos)
+    {
+        if (headers.count("content-length"))
+            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 33\r\n\r\nConflicting Transfer-Encoding and Content-Length"));
         return (parseChunkedBody());
+    }
     else if (headers.count("content-length"))
     {
         int contentLength = std::atoi(headers["content-length"].c_str());
-        std::clog << "DEBUG: Content-length = " << contentLength << "\n";
         if (_bufferLen - _pos < contentLength)
             throw (HttpIncompleteRequest());
-        std::clog << "DEBUG: Appended " << contentLength << " bytes to the body.\n";
         body.append(_buffer + _pos, contentLength);
         _pos += contentLength;
     }
     state = COMPLETE;
-    std::cout << "FULL PARSED ReQUEST : \n"
-            << "          -method: " << method 
-            <<"\n          -uri: " << uri
-            <<"\n          -version: " << version
-            <<"\n          -headers:\n";
-    for (auto header : headers)
-        std::cout << "              -" << header.first << ": " << header.second << "\n";
-    std::cout << "          -body: \n{" << body << "\n}\n";   
     return (_pos - startPos);
 }
 

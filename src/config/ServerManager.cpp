@@ -102,7 +102,7 @@ void    ServerManager::addToEpoll(int clientSocket)
     setNonBlocking(clientSocket);
     struct epoll_event event;
     memset(&event, 0, sizeof(event));
-    event.events = EPOLLIN | EPOLLOUT;
+    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
     event.data.fd = clientSocket;
     if (epoll_ctl(epollFd, EPOLL_CTL_ADD, clientSocket, &event) == -1)
         throw std::runtime_error("ERROR: Adding socket to epoll: " + std::string(strerror(errno)));
@@ -112,7 +112,6 @@ void ServerManager::closeConnection(int fd) {
     Server* server = findServerBySocket(fd);
     if (server) {
         server->closeConnection(fd);
-        Clients.erase(fd);
         epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, NULL);
     }
 }
@@ -141,7 +140,6 @@ void ServerManager::sendResponse(int clientSocket) {
     } else {
         modifyEpollEvent(clientSocket, EPOLLIN);
     }
-
 }
 
 
@@ -162,20 +160,33 @@ void    ServerManager::handleConnections(int listeningSocket)
 
 
 void ServerManager::readRequest(Client& Client) {
+    // request 7atha f client.request; muhim chuf kidir hhh
     const size_t bufferSize = 4096;
     char buffer[bufferSize];
     int bytesReceived;
 
     bytesReceived = recv(Client.getFd(), buffer, bufferSize, 0);
-    if (bytesReceived == -1 || bytesReceived == 0) {
+    if (bytesReceived == -1) {
+        std::cerr << "ERROR: receiving data in client socket N" << Client.getFd() << "\n";
+        closeConnection(Client.getFd());
+        return ;
+    }
+    else if (bytesReceived == 0) {
         closeConnection(Client.getFd());
         return ;
     }
     Client.getRequest().getRequestBuffer().append(buffer, bytesReceived);
-    std::string& request = Client.getRequest().getRequestBuffer();
-    Client.getRequest().parse(request.c_str(), request.size());
+
+    std::string request;
+    request = Client.getRequest().getRequestBuffer();
+    bytesReceived = Client.getRequest().parse(request.c_str(), request.size());
+    if (bytesReceived > 0)
+        request.erase(0, bytesReceived);
+    if (Client.getRequest().isRequestComplete())
+        return ;
 }
 
+// here where u should parse the request
 void ServerManager::handleRequest(int clientSocket) {
     std::map<int, Client>::iterator Client = Clients.find(clientSocket);
 
@@ -184,12 +195,12 @@ void ServerManager::handleRequest(int clientSocket) {
         // hna l3b kima bghiti
         try {
             readRequest(Client->second);
-            if (Client->second.getRequest().isRequestComplete())
-                modifyEpollEvent(clientSocket, EPOLLOUT);
+            modifyEpollEvent(clientSocket, EPOLLOUT);
         } catch (const std::exception& e) {
             sendErrorResponse(clientSocket, e.what());
         }
     }
+    // just skip if client not found.
 }
 
 
@@ -256,7 +267,7 @@ void  ServerManager::initServers()
     }
 }
 void ServerManager::initEpoll() {
-    epollFd = epoll_create1(0);
+    epollFd = epoll_create1(O_CLOEXEC);
     if (epollFd == -1) {
         throw std::runtime_error("ERROR: creating epoll instance: " + std::string(strerror(errno)));
     }
