@@ -111,42 +111,6 @@ class HttpRequest
             return std::string(reinterpret_cast<const char*>(line.data()), line.size());
         }
         bool    isRequestComplete();
-        
-        std::string getUploadDir() {
-            Route& routeConf = getConfig().getRoutes()[RequestrouteKey];
-            if (!routeConf.upload_dir.empty()) {
-                return std::string(routeConf.upload_dir);
-            }
-            return "www/html/uploads/";
-        }
-
-        void    reset() {
-            _buffer = 0;
-            _bufferLen = 0;
-            bodyStart = 0;
-            defaultIndex.clear();
-            autoIndex = false;
-            statusCode = 200;
-            fileCreated = false;
-            outfilename.clear();
-            _currentChunkSize = -1;
-            _totalBodysize = 0;
-            _currentChunkBytesRead = 0;
-            method.clear();
-            uriPath.clear();
-            version.clear();
-            body.clear();
-            uri.clear();
-            request.clear();
-            originalUri.clear();
-            uriQueryParams.clear();
-            headers.clear();
-            RequestrouteKey.clear();
-            isChunked = false;
-            // routeConf = Route();
-            keepAlive = true;
-            _pos = 0;
-            autoIndex = false;
-            state = REQUESTLINE;
-        }
+        std::string getUploadDir();
+        void    reset();
 };

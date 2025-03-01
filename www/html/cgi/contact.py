@@ -12,5 +12,3 @@ form = cgi.FieldStorage()
 name = form.getvalue("name", "Unknown")  # Default to "Unknown" if no input
 
 print(f"<p>Hello, {name}!</p>")
-
-print("Hello from Python!")

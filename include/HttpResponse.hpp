@@ -47,17 +47,7 @@ public:
     void    POST(HttpRequest& request);
     void    DELETE(HttpRequest& request);
     HttpResponse(Config& conf);
-    void    reset()
-    {
-        requestedContent.clear();
-        statusCode = 200;
-        contentLength = 0;
-        contentType = "text/html";
-        responseHeaders.clear();
-        responseBody.clear();
-        Date.clear();
-        Connection.clear();
-    }
+    void    reset();
     std::string    combineHeaders();
 };
 

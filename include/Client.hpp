@@ -27,29 +27,9 @@ class Client {
         int serverPort;
         Config& client_config; 
         Client(int client_fd, Config& Conf);
-        void resetState() {
-            request.reset();
-            response.reset();
-            if (file.is_open()) {
-                file.close();
-            }
-            sendBuffer.clear();
-            sendOffset = 0;
-         }
+        void resetState();
         int getFd() const { return client_fd; }
-        bool    shouldKeepAlive() {
-            std::map<std::string, std::string>::iterator It = request.getHeaders().find("connection");
-            if (It != request.getHeaders().end()) {
-                std::string connectionValue = It->second;
-                if (connectionValue.find("close") != std::string::npos) {
-                    return false;
-                }
-                else if (connectionValue.find("keep-alive") != std::string::npos) {
-                    return true;
-                }
-            }
-            return true; 
-        }
+        bool    shouldKeepAlive();
         HttpRequest& getRequest() { return request; }
         HttpResponse& getResponse() { return response; }
         std::string& getSendBuffer() { return sendBuffer; }
