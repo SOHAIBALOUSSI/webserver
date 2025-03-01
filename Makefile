@@ -1,20 +1,20 @@
 CXX = c++
-CXXFLAGS = #-Wall -Wextra -Werror #-std=c++98 
+CXXFLAGS = -Ofast -g3 #-Wall -Wextra -Werror #-std=c++98 
 
 NAME = server
 
 SRCS = src/http/HttpRequest.cpp src/config/Server.cpp src/Common.cpp src/config/Socket.cpp \
 		src/config/Config.cpp src/Route.cpp src/Webserv.cpp src/config/ServerManager.cpp \
-		src/Client.cpp 
+		src/Client.cpp src/http/HttpResponse.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
+$(NAME): $(OBJS) 
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-%.o: %.cpp
+%.o: %.cpp ./include/*
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
@@ -25,4 +25,6 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all clean debug
+.PHONY: all clean
+
+.SECONDARY: $(OBJS)

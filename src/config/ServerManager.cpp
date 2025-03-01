@@ -1,14 +1,47 @@
 #include "../../include/ServerManager.hpp"
+#include "../../include/HttpResponse.hpp"
 
-ServerManager::ServerManager() : epollFd(-1), events(100) {}
+static ServerManager *g_manager = NULL;
 
-ServerManager::~ServerManager()
+ServerManager::ServerManager() : epollFd(-1), events() {}
+
+void    ServerManager::shutDownManager()
 {
     if (epollFd != -1)
     {
         close(epollFd);
         epollFd = -1;
     }
+    for (size_t i = 0; i < servers.size(); i++)
+        delete servers[i];
+    servers.clear();
+    events.clear();
+    Clients.clear();
+    listeningSockets.clear();
+    serverPool.clear();
+}
+
+ServerManager::~ServerManager()
+{
+    std::clog << INFO << "INFO: Shutting down Cluster\n" << RESET;
+    shutDownManager();
+}
+
+void    ServerManager::handleSignal(int sig)
+{
+    (void) sig;
+
+    if (g_manager)
+        g_manager->shutDownManager();
+    exit(0);
+}
+
+void    ServerManager::handleSignals()
+{
+    g_manager = this;
+    signal(SIGINT, handleSignal);
+    signal(SIGTERM, handleSignal);
+    signal(SIGQUIT, handleSignal);
 }
 
 bool    ServerManager::isListeningSocket(int fd)
@@ -33,7 +66,8 @@ Server* ServerManager::findServerBySocket(int fd)
         }
         else
         {
-            const std::vector<int>& clientSockets = servers[i]->getClientSockets();        
+            const std::vector<int>& clientSockets = servers[i]->getClientSockets();     
+            std::find(clientSockets.begin(), clientSockets.end(), fd);  
             for (int k = 0; k < clientSockets.size(); k++)
             {
                 if (clientSockets[k] == fd)
@@ -47,53 +81,32 @@ Server* ServerManager::findServerBySocket(int fd)
 void  ServerManager::setNonBlocking(int fd)
 {
     if (fd < 0)
-        throw std::runtime_error("ERROR: Invalid file descriptor: " + std::to_string(fd));
+        throw std::runtime_error(ERROR + timeStamp() + "ERROR: Invalid file descriptor: " + std::to_string(fd) + std::string(RESET));
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1)
-        throw std::runtime_error("ERROR: Getting flags for client socket: " + std::string(strerror(errno)));
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-        throw std::runtime_error("ERROR: Setting socket to non-blocking: " + std::string(strerror(errno)));
+        throw std::runtime_error(ERROR + timeStamp() + "ERROR: Getting flags for client socket: " + std::string(strerror(errno)) + std::string(RESET));
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK)) 
+        throw std::runtime_error(ERROR + timeStamp() + "ERROR: Setting socket to non-blocking: " + std::string(strerror(errno)) + std::string(RESET));
 }
 
 
 void    ServerManager::addListeningSockets(std::vector<Server*>& servers)
 {
-    std::vector<Server*>::iterator server = servers.begin();
-    int i = 0;
-    while (server != servers.end())
+    for (size_t i = 0; i < servers.size(); i++)
     {
-        std::clog << "INFO: Server number " << i + 1 << '\n';
-        int j = 0;
-        std::vector<Socket*>::const_iterator socket = (*server)->getListeningSockets().begin();
-        while (socket != (*server)->getListeningSockets().end())
+        std::vector<Socket*> sockets = servers[i]->getListeningSockets();
+        for (size_t j = 0; j < sockets.size(); j++)
         {
-            std::clog << "INFO: Socket number " << j + 1 << " for Server number " << i + 1 << ":\n";
-            int listeningSocket = (*socket)->getFd();
-            socklen_t optval;
-            socklen_t optlen = sizeof(optval);
-            if (getsockopt(listeningSocket, SOL_SOCKET, SO_ACCEPTCONN, &optval, &optlen) == -1) //remove before push
-                throw std::runtime_error("getsockopt failed: " + std::string(strerror(errno)));
-            else 
-            {
-                if (optval)
-                    std::cout << "   -Socket is in listening state.\n";
-                else
-                    std::cerr << "   -Socket is NOT in listening state.\n";
-            }
+            int listeningSocket = sockets[j]->getFd();
             setNonBlocking(listeningSocket);
             struct epoll_event event;
             memset(&event, 0, sizeof(event));
             event.events = EPOLLIN;
             event.data.fd = listeningSocket;
-            std::cout << "   -Socket's fd : " << listeningSocket << '\n';
             if (epoll_ctl(epollFd, EPOLL_CTL_ADD, listeningSocket, &event) == -1)
-                throw std::runtime_error("ERROR:  adding socket to epoll: " + std::string(strerror(errno)));
+                throw std::runtime_error(ERROR + timeStamp() + "ERROR:  adding socket to epoll: " + std::string(strerror(errno)) + std::string(RESET));
             events.push_back(event);
-            ++socket;
-            j++;
         }
-        ++server;
-        i++;
     }
 }
 
@@ -102,22 +115,24 @@ void    ServerManager::addToEpoll(int clientSocket)
     setNonBlocking(clientSocket);
     struct epoll_event event;
     memset(&event, 0, sizeof(event));
-    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    event.events = EPOLLIN;
     event.data.fd = clientSocket;
     if (epoll_ctl(epollFd, EPOLL_CTL_ADD, clientSocket, &event) == -1)
-        throw std::runtime_error("ERROR: Adding socket to epoll: " + std::string(strerror(errno)));
+        throw std::runtime_error(ERROR + timeStamp() + "ERROR: Adding socket to epoll: " + std::string(strerror(errno)) + std::string(RESET));
 }
 
 void ServerManager::closeConnection(int fd) {
     Server* server = findServerBySocket(fd);
     if (server) {
-        server->closeConnection(fd);
         epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, NULL);
+        server->closeConnection(fd);
+        Clients.erase(fd);
     }
 }
 
 void ServerManager::modifyEpollEvent(int fd, uint32_t events) {
     struct epoll_event event;
+    memset(&event, 0, sizeof(event));
     event.events = events;
     event.data.fd = fd;
     if (epoll_ctl(epollFd, EPOLL_CTL_MOD, fd, &event) == -1) {
@@ -125,156 +140,274 @@ void ServerManager::modifyEpollEvent(int fd, uint32_t events) {
     }
 }
 
-void ServerManager::sendErrorResponse(int clientSocket, const std::string& error) {
-    if (send(clientSocket, error.c_str(), error.size(), 0) == -1) {
-        std::cerr << "ERROR: sending error response to client socket N" << clientSocket << "\n";
-        closeConnection(clientSocket);
-    }
+void ServerManager::LOG(int status, HttpRequest& request, HttpResponse& response) {
+    std::string statusColor = CYAN;
+
+    if (response.statusCode >= 400) { statusColor = RED; }
+    else if (response.statusCode >= 300) { statusColor = BLUE; }
+    else if (response.statusCode >= 200) { statusColor = GREEN; }
+    std::cout << statusColor << timeStamp() 
+                << statusColor << request.getMethod() << " " 
+                << statusColor << request.getURI() << " " 
+                << statusColor << response.statusCode << " " 
+                << HttpResponse::statusCodesMap[response.statusCode] << RESET << std::endl;
 }
 
 void ServerManager::sendResponse(int clientSocket) {
-    std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\npain!";
-    if (send(clientSocket, response.c_str(), response.size(), 0) == -1) {
-        std::cerr << "ERROR: Sending data\n";
-        closeConnection(clientSocket);
-    } else {
-        modifyEpollEvent(clientSocket, EPOLLIN);
+    std::map<int, Client>::iterator It = Clients.find(clientSocket);
+    if (It == Clients.end()) return;
+    
+    Client& client = It->second;
+    HttpResponse& response = client.getResponse();
+    
+    switch (client.getClientState()) {
+        case GENERATING_RESPONSE: {
+            client.setKeepAlive(client.shouldKeepAlive());
+            client.sendBuffer = response.responseHeaders;
+            response.responseHeaders.clear();
+            client.setState(SENDING_HEADERS);
+            break;
+        }
+        case SENDING_HEADERS: {
+            ssize_t bytesSent = send(clientSocket, client.sendBuffer.c_str() + client.sendOffset,
+                                    client.sendBuffer.size() - client.sendOffset, MSG_NOSIGNAL);
+            if (bytesSent < 0) {
+                std::cerr << "Send headers failed: " << strerror(errno) << "\n";
+                return closeConnection(clientSocket);
+            }
+            client.sendOffset += bytesSent;
+            if (client.sendOffset >= client.sendBuffer.size()) {
+                client.sendBuffer.clear();
+                client.sendOffset = 0;
+                if (!response.responseBody.empty()) {
+                    client.sendBuffer = response.responseBody;
+                    client.setState(SENDING_BODY);
+                } else if (response.statusCode < 400) {
+                    client.file.open(client.getRequest().getUriPath().c_str(), std::ios::binary);
+                    if (!client.file.is_open()) {
+                        // std::cerr << "Failed to open file: " << client.getRequest().getUriPath() << "\n";
+                        client.setState(COMPLETED);
+                    } else {
+                        client.setState(SENDING_BODY);
+                    }
+                } else {
+                    client.setState(COMPLETED);
+                }
+            }
+            break;
+        }
+        case SENDING_BODY: {
+            if (client.sendBuffer.empty()) {
+                if (client.file.is_open()) {
+                    char buffer[8192];
+                    client.file.read(buffer, 8192);
+                    std::streamsize bytesRead = client.file.gcount();
+                    if (bytesRead > 0) {
+                        client.sendBuffer.append(buffer, bytesRead);
+
+                    } else {
+                        client.file.close();
+                        client.setState(COMPLETED);
+                    }
+                } else {
+                    client.setState(COMPLETED);
+                }
+            }
+
+            if (!client.sendBuffer.empty()) {
+                ssize_t bytesSent = send(clientSocket, client.sendBuffer.c_str() + client.sendOffset,
+                                        client.sendBuffer.size() - client.sendOffset, MSG_NOSIGNAL);
+                if (bytesSent < 0) {
+                    std::cerr << "Send body failed: " << strerror(errno) << "\n";
+                    return closeConnection(clientSocket);
+                }
+                client.sendOffset += bytesSent;
+                if (client.sendOffset >= client.sendBuffer.size()) {
+                    client.sendBuffer.clear();
+                    client.sendOffset = 0;
+                    if (!client.file.is_open()) {
+                        client.setState(COMPLETED);
+                    }
+                }
+            }
+            break;
+        }
+        case COMPLETED: {
+            if (client.file.is_open()) {
+                client.file.close();
+            }
+            if (response.statusCode == 301 || response.statusCode == 201) {
+                return closeConnection(clientSocket);
+            }
+            ////// KEEP THIS DONT DELETE IT !!!!!!!!!!!!!!    
+            // if (client.getKeepAlive()) {
+            //     client.resetState();
+            //     client.setState(READING_REQUEST);
+            //     modifyEpollEvent(clientSocket, EPOLLIN);
+            // } else {
+            // }
+            closeConnection(clientSocket); // Adjust for keep-alive later if needed
+            break;
+        }
+        default:
+            break;
     }
 }
 
-
 void    ServerManager::handleConnections(int listeningSocket)
 {
+
     try {
         Server* server = findServerBySocket(listeningSocket);
         int clientFD = server->acceptConnection(listeningSocket);
-        if (clientFD == -1)
-            return ;
+        if (clientFD == -1) return ;
         addToEpoll(clientFD);
-        Clients.insert(std::pair<int, Client>(clientFD, Client(clientFD)));
+        Clients.emplace(clientFD, Client(clientFD, server->getserverConfig()));
     }
     catch(const std::exception& e) {
         std::cerr << e.what() << '\n';
     }
 }
 
+// void ServerManager::handleConnections(int listeningSocket) {
+//     try {
+//         Server* server = findServerBySocket(listeningSocket);
+//         int clientFD = server->acceptConnection(listeningSocket);
+//         if (clientFD == -1) return;
+
+//         struct sockaddr_in addr;
+//         socklen_t addrLen = sizeof(addr);
+//         if (getsockname(listeningSocket, (struct sockaddr*)&addr, &addrLen) == -1) {
+//             std::cerr << "getsockname failed: " << strerror(errno) << "\n";
+//             close(clientFD);
+//             return;
+//         }
+//         int serverPort = ntohs(addr.sin_port);
+
+//         addToEpoll(clientFD);
+//         Client client(clientFD, server->getserverConfig());
+//         client.setServerPort(serverPort); // Set the port
+//         Clients.emplace(clientFD, client);
+//         std::cout << "Client connected on port: " << serverPort << "\n"; // Debug
+//     } catch (const std::exception& e) {
+//         std::cerr << e.what() << "\n";
+//     }
+// }
 
 void ServerManager::readRequest(Client& Client) {
-    // request 7atha f client.request; muhim chuf kidir hhh
-    const size_t bufferSize = 4096;
-    char buffer[bufferSize];
-    int bytesReceived;
+    uint8_t buffer[READ_BUFFER_SIZE];
+    memset(buffer, 0, READ_BUFFER_SIZE);
 
-    bytesReceived = recv(Client.getFd(), buffer, bufferSize, 0);
+    int bytesReceived = 0;
+    int clientFd = Client.getFd();
+    HttpRequest& request = Client.getRequest();
+    bytesReceived = recv(clientFd, buffer, READ_BUFFER_SIZE, 0);
     if (bytesReceived == -1) {
-        std::cerr << "ERROR: receiving data in client socket N" << Client.getFd() << "\n";
-        closeConnection(Client.getFd());
-        return ;
+        std::clog << ERROR << timeStamp()<< "ERROR: receiving data in client socket N" << clientFd << "\n" << RESET;
+        return closeConnection(clientFd);
     }
     else if (bytesReceived == 0) {
-        closeConnection(Client.getFd());
-        return ;
+        return closeConnection(clientFd);
     }
-    Client.getRequest().getRequestBuffer().append(buffer, bytesReceived);
 
-    std::string request;
-    request = Client.getRequest().getRequestBuffer();
-    bytesReceived = Client.getRequest().parse(request.c_str(), request.size());
-    if (bytesReceived > 0)
-        request.erase(0, bytesReceived);
-    if (Client.getRequest().isRequestComplete())
-        return ;
+    std::vector<uint8_t>& requestBuffer = request.getRequestBuffer();
+    requestBuffer.insert(requestBuffer.end(), buffer, buffer + bytesReceived);
+    bytesReceived = request.parse(requestBuffer.data(), requestBuffer.size());
+    // if (bytesReceived > 0)
+    //     requestBuffer.erase(requestBuffer.begin(), requestBuffer.begin() + bytesReceived);
 }
 
-// here where u should parse the request
-void ServerManager::handleRequest(int clientSocket) {
-    std::map<int, Client>::iterator Client = Clients.find(clientSocket);
+void ServerManager::handleRequest(int clientSocket)
+{
+    std::map<int, Client>::iterator It = Clients.find(clientSocket);
+    if (It == Clients.end()) return ;
+    
+    Client& client = It->second;
+    HttpRequest& request = client.getRequest();
+    HttpResponse& response = client.getResponse();
 
-    if (Client != Clients.end())
-    {
-        // hna l3b kima bghiti
-        try {
-            readRequest(Client->second);
+    if (client.getClientState() == READING_REQUEST) {
+        readRequest(client);
+        if (request.getState() == COMPLETE) {
+            client.setState(GENERATING_RESPONSE);
+            response.generateResponse(request);
+
+            LOG(request.getStatusCode(), request, response);
+            
             modifyEpollEvent(clientSocket, EPOLLOUT);
-        } catch (const std::exception& e) {
-            sendErrorResponse(clientSocket, e.what());
         }
     }
-    // just skip if client not found.
 }
 
 
 void ServerManager::handleEvent(const epoll_event& event) {
     int fd = event.data.fd;
-    if (event.events & EPOLLIN) { // ready to recv
-        if (isListeningSocket(fd)) { 
-            handleConnections(fd); // accept Client Connection
-        }else{
-            handleRequest(fd); // tkalef a m3ayzo
-        }
+    
+    if (event.events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
+        std::cerr << ERROR << timeStamp() << "ERROR:" << strerror(errno) << "\n" << RESET;
+        return closeConnection(fd);
     }
-    else if (event.events & EPOLLOUT) { // ready to send 
-        sendResponse(fd); 
+
+    if (event.events & EPOLLIN) {
+        if (isListeningSocket(fd))
+            handleConnections(fd);
+        else
+            handleRequest(fd);
     }
-    else if (event.events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
-        std::cerr << "ERROR: " << strerror(errno) << "\n";
-        closeConnection(fd);
-    }
+    if (event.events & EPOLLOUT) 
+        sendResponse(fd);
 }
 
-void    ServerManager::eventsLoop() // events Loop (main loop)
+void    ServerManager::eventsLoop()
 {
     while (1) {
         int eventsNum = epoll_wait(epollFd, events.data(), events.size(), -1);
         if (eventsNum == -1){
-            std::cerr << "ERROR: in epoll_wait: " << strerror(errno) << std::endl;
+            std::cerr << ERROR << timeStamp() << "ERROR: in epoll_wait: " << strerror(errno) << std::endl << RESET;
             continue ;
         }
         if (eventsNum == events.size())
             events.resize(events.size() * 2);
 
-        for (int i = 0; i < eventsNum; i++){
+        for (int i = 0; i < eventsNum; i++)
             handleEvent(events[i]);
-        }
     }
 }
 
+
 void  ServerManager::initServers()
 {
-    std::vector<Config>::const_iterator it = serverPool.begin();
-    while (it != serverPool.end())
+    handleSignals();
+    for (size_t i = 0; i < serverPool.size(); i++)
     {
         try {    
-            Server* server = new Server(*it);
-            std::clog << "Setting & starting up server :\n   -host: " << it->getHost() << "\n";
-            std::set<int>::const_iterator port =  it->getPorts().begin();
-            while (port != it->getPorts().end()) {
+            Server* server = new Server(serverPool[i]);
+            std::clog << INFO << timeStamp() << "INFO: Setting & starting up server :\n" << RESET << "   -host: " << serverPool[i].getHost() << "\n";
+            std::set<int>::const_iterator port =  serverPool[i].getPorts().begin();
+            while (port != serverPool[i].getPorts().end()) {
                 std::clog << "   -port: " << *port;
                 ++port;
             }
             std::clog << std::endl;
             servers.push_back(server);
-            std::vector<Socket*>::const_iterator socket = server->getListeningSockets().begin();
-            while (socket != server->getListeningSockets().end()) {
-                listeningSockets[(*socket)->getFd()] = (*socket);
-                ++socket;
-            }
+            std::vector<Socket*> sockets = server->getListeningSockets();
+            for (size_t j = 0; j < sockets.size(); j++)
+                listeningSockets[sockets[j]->getFd()] = sockets[j];
         }
         catch(const std::exception& e) {
             std::cerr << e.what() << '\n';
         }
-        ++it;
     }
 }
 void ServerManager::initEpoll() {
-    epollFd = epoll_create1(O_CLOEXEC);
+    epollFd = epoll_create1(O_CLOEXEC); // idk why but is make diffrence in the server performance
     if (epollFd == -1) {
-        throw std::runtime_error("ERROR: creating epoll instance: " + std::string(strerror(errno)));
+        throw std::runtime_error(ERROR + timeStamp() + "ERROR: creating epoll instance: " + std::string(strerror(errno) + std::string(RESET)));
     }
     addListeningSockets(servers);
 }
 
-ServerManager::ServerManager(const std::vector<Config>& _serverPool) : serverPool(_serverPool), epollFd(-1), events(100)
+ServerManager::ServerManager(const std::vector<Config>& _serverPool) : serverPool(_serverPool), epollFd(-1), events(0)
 {
     initServers();
     initEpoll();

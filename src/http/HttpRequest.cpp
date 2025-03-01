@@ -1,149 +1,144 @@
 #include "../../include/HttpRequest.hpp"
+#include "../../include/HttpResponse.hpp"
 #include <algorithm>
 #include <stdexcept>
-
-HttpRequest::HttpRequest(const std::string &request)
-{
-    std::istringstream iss(request);
-    std::string requestLine;
-    std::getline(iss, requestLine);
-    if (requestLine.empty() || requestLine[requestLine.size() - 1] != '\r')
-        throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nMalformed request line");
-    std::istringstream oss(requestLine);
-    oss >> method >> uri >> version;
-    if ((method.empty() || uri.empty() || version.empty()))
-        throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nMalformed request line");
-    std::cout << "LOG: received request:\n      \"" << method << "\" " <<  "\"" << uri << "\" " <<  "\"" << version << "\" " << std::endl; 
-    if ((method == "GET" || method == "POST" || method == "DELETE")
-        && (version == "HTTP/1.0" || version == "HTTP/1.1"))
-    {
-        while (std::getline(iss, requestLine)) {
-            if (requestLine == "\r" || requestLine.empty()) break;
-            std::size_t pos = requestLine.find(':');
-            std::cout << "      " << requestLine << std::endl;
-            if (pos == std::string::npos)
-                throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 25\r\n\r\nMalformed request header");
-            std::string key = requestLine.substr(0, pos);
-            std::string value = requestLine.substr(pos + 1);
-            key.erase(key.find_last_not_of(" \t\r\n") + 1);
-            value.erase(0, value.find_first_not_of(" \t\r\n"));        
-            if (value.empty())
-                throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 19\r\n\r\nEmpty header value");
-            headers[toLowerCase(key)] = value;
-        }
-        if (method == "POST")
-        {
-            // size_t contentLen = stoi(headers["content-length"]);
-            std::string body;
-            while (std::getline(iss, requestLine))
-                body += requestLine.substr(0, requestLine.find_last_not_of("\r") + 1);
-            std::cout << "==>BODY : \n" << body << "\n_________________\n" << std::endl;
-            // if (body.size() == contentLen)
-            this->body = body;
-            // throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nMalformed request line");
-        }
-    }
-    else
-        throw std::runtime_error("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nMalformed request line");
-}
-
 
 HttpRequest::HttpRequest() : state(REQUESTLINE), _pos(0), _bufferLen(0) {}
 
 HttpRequest::~HttpRequest() {}
 
-HttpRequest::HttpRequest(const Config& _configs) : state(REQUESTLINE), _pos(0), _bufferLen(0), configs(_configs) {}
-
-/*
-for i in {1..100}; do
-  curl -v GET 127.0.0.1:4383
-done
-
-
-for i in {1..100}; do
-  curl -v GET 127.0.0.1:4383 &
-done
-wait
-
-for i in {1..100}; do
-  curl -v -X POST -d "param1=value1&param2=value2" 127.0.0.1:4383 &
-done
-wait
-*/
+HttpRequest::HttpRequest(const Config& _configs)
+    : state(REQUESTLINE), _pos(0), _bufferLen(0),
+        configs(_configs), statusCode(200), originalUri(),
+        autoIndex(false), _currentChunkSize(-1), _currentChunkBytesRead(0),
+        fileCreated(0), isChunked(0), _totalBodysize(0) {}
 
 
-size_t    HttpRequest::parse(const char* buffer, size_t bufferLen)
-{
+size_t HttpRequest::parse(const uint8_t *buffer, size_t bufferLen) {
     this->_bufferLen = bufferLen;
     this->_buffer = buffer;
     size_t bytesReceived = 0;
-
-    try
-    {
-        if (state == REQUESTLINE)
-            bytesReceived += parseRequestLine(); 
-        if (state == HEADERS) 
+    try {
+        if (state == REQUESTLINE) {
+            bytesReceived += parseRequestLine();
+            
+        }
+        if (state == HEADERS) {
             bytesReceived += parseHeaders();
-        if (state == BODY) 
-            bytesReceived += parseBody(); 
-        if (state == COMPLETE) 
-            return 0;
+           
+        }
+        if (state == BODY) {
+            if (headers.count("content-length") || isChunked) {
+                bytesReceived += parseBody();
+
+            } else {
+                state = COMPLETE; // No body for GET/DELETE
+            }
+        }
+        if (state == COMPLETE) {
+            return bytesReceived; // Return total bytes parsed
+        }
+    } catch (int code) {
+        setStatusCode(code);
+        request.clear();
+        state = COMPLETE;
+        return bytesReceived;
+    } catch (const HttpIncompleteRequest& e) {
+        return bytesReceived;
     }
-    catch(const HttpIncompleteRequest& e)
-    {
-        return (bytesReceived);
-    }
-    return (bytesReceived);
+    return bytesReceived;
 }
 
-// METHOD SP URI SP VERSION CRLF
 size_t    HttpRequest::parseRequestLine()
 {
-    std::string line = readLine();
-    if (line.empty())
-        throw (HttpIncompleteRequest());
+    std::string line = getLineAsString(readLine());
+    if (line.empty()) throw (HttpIncompleteRequest());
     size_t firstSpace = line.find(' ');
     size_t secondSpace = line.find(' ', firstSpace + 1);
     if (firstSpace == std::string::npos || secondSpace == std::string::npos)
-        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 22\r\n\r\nMalformed request line")); 
+        throw 400;
     if (line.find(' ', secondSpace + 1) != std::string::npos)
-        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 22\r\n\r\nMalformed request line")); 
+        throw 400;
     method = line.substr(0, firstSpace);
     uri = line.substr(firstSpace + 1, secondSpace - firstSpace - 1);
     version = line.substr(secondSpace + 1);
     validateMethod();
     validateURI();
+    RouteURI();
     validateVersion();
     state = HEADERS;
     return (line.size() + 2);
 }
 
+
+void    HttpRequest::RouteURI()
+{
+    Config& conf = configs;
+    std::string  routeKey;
+    std::map<std::string, Route>::iterator routeIt;
+    std::map<std::string, Route> routesMap = conf.getRoutes();
+    
+    for (routeIt = routesMap.begin(); routeIt != routesMap.end(); routeIt++) {
+        if (uriPath.find(routeIt->first) == 0) {
+            if (routeIt->first.size() > routeKey.size()){
+                routeKey = routeIt->first;
+            }
+        }
+    }
+    if (!routeKey.empty()) {
+        routeConf = routesMap[routeKey];    
+        RequestrouteKey = routeKey; // 7di m3a hada latmes7o!!!!!!!!!!!! checki 7ta lheader dyal request
+        defaultIndex = routeConf.getDefaultFile();
+        autoIndex = routeConf.getAutoIndexState();    
+        if (routeKey == "/") {
+            if (size_t pos = uriPath.find('/') != std::string::npos)
+                uriPath.replace(pos-1, 1, routeConf.getRoot()+"/"); // back to it later
+        }
+        else {
+            if (size_t pos = uriPath.find(routeKey) != std::string::npos) {
+                uriPath.replace(pos-1, routeKey.size(), routeConf.getRoot());
+            }
+        }
+    }
+    setStatusCode(checkFilePerms(uriPath)); 
+}
+
+std::string HttpRequest::getRequestrouteKey() {
+    return RequestrouteKey;
+}
+
 void    HttpRequest::validateMethod()
 {
     if (method != "GET" && method != "DELETE" && method != "POST")
-        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 18\r\n\r\nMalformed request line"));
+        throw 501;
 }
 
 void    HttpRequest::validateURI()
 {
-    if (uri.empty())
-        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nBad URI"));
-    std::pair<std::string, std::string> pathAndQuery = splitKeyValue(uri, '?');
-    uriPath = pathAndQuery.first;
-    std::string query = pathAndQuery.second;
-    if (!isAbsoluteURI())
-    {
-        if (uriPath[0] != '/')
-            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 7\r\n\r\nBad URI"));
+    if (uri.empty()) { throw 400; }
+    if (uri.size() > 2048) { throw 414; }
+
+    size_t queryPos = uri.find('?');
+    std::string query;
+    if (queryPos != std::string::npos) {
+        uriPath = uri.substr(0, queryPos);    
+        query = uri.substr(queryPos + 1);
     }
-    else
-    {
+    else {
+        uriPath = uri;
+        query.clear(); 
+    }
+    if (!isAbsoluteURI()) {
+        if (uriPath[0] != '/') throw 400;
+    }
+    else {
         size_t schemeEnd = uriPath.find('/');
         if (schemeEnd != std::string::npos)
             uriPath = uriPath.substr(schemeEnd + 2);
         else
             uriPath = "/";
     }
+    originalUri = uriPath;
     uriPath = decodeAndNormalize();
     if (!query.empty())
         uriQueryParams = decodeAndParseQuery(query);
@@ -161,7 +156,7 @@ std::map<std::string, std::string> HttpRequest::decodeAndParseQuery(std::string&
         value = (pos != std::string::npos ? queryParam.substr(pos + 1) : "");
         if (value.find('#') != std::string::npos)
             value.erase(value.find('#'));
-        queryParams[key] = value;//decode this
+        queryParams[decode(key)] = decode(value);//decode this
     }
     return (queryParams);
 }
@@ -169,19 +164,20 @@ std::map<std::string, std::string> HttpRequest::decodeAndParseQuery(std::string&
 std::string HttpRequest::decode(std::string& encoded)
 {
     std::string decoded;
+
     for (size_t i = 0; i < encoded.size(); i++)
     {
         if (encoded[i] == '%')
         {
             if (i + 2 >= encoded.size())
-                throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 24\r\n\r\nInvalid percent-encoding"));
+                throw 400;
             if (!isHexDigit(encoded[i + 1]) || !isHexDigit(encoded[i + 1]))                
-                throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 24\r\n\r\nInvalid percent-encoding"));
+                throw 400;
             decoded += hexToValue(encoded[i + 1]) * 16 + hexToValue(encoded[i + 2]);
             i += 2;
         }
         else if (!isURIchar(encoded[i]))
-            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nInvalid URI character"));
+            throw 400;
         else
             decoded += encoded[i];
     }
@@ -202,7 +198,7 @@ std::string HttpRequest::normalize(std::string& decoded)
             if (!normalizedSegments.empty()) 
                 normalizedSegments.pop_back();
         }
-        else 
+        else
             normalizedSegments.push_back(segment);
     }
     for (size_t i = 0; i < normalizedSegments.size(); i++)
@@ -220,14 +216,19 @@ std::string HttpRequest::decodeAndNormalize()
     std::istringstream iss(uriPath);
     std::string segment;
     std::string decodedAndNormalized;
+    bool hasTrailingSlash = uriPath.back() == '/';
+
     while (std::getline(iss, segment, '/'))
         decodedAndNormalized += "/" + decode(segment);
-    return (normalize(decodedAndNormalized));
+    std::string normalized = normalize(decodedAndNormalized); 
+    if (hasTrailingSlash)
+        normalized += "/";
+    return (normalized);
 }
 
 bool    HttpRequest::isAbsoluteURI()
 {
-    return (uri.find("http://") == 0);
+    return (uri.find("http://") == 0 || uri.find("https://") == 0);
 }
 
 bool    HttpRequest::isURIchar(char c)
@@ -239,91 +240,154 @@ bool    HttpRequest::isURIchar(char c)
 void    HttpRequest::validateVersion()
 {
     if (version.empty() || version != "HTTP/1.1")
-        throw (HttpRequestError("HTTP/1.1 505 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 21\r\n\r\nVersion not supported"));
+        throw 505;
 }
 
 //header-field   = field-name ":" OWS field-value OWS
+
 size_t    HttpRequest::parseHeaders()
 {
     size_t startPos = _pos;
-    std::clog << "DEBUG: Parsing Headers...\n";
-    std::string line = readLine();
+    std::string line = getLineAsString(readLine());
     while (!line.empty())
     {
         std::pair<std::string, std::string> keyValue = splitKeyValue(line, ':');
         std::string key = toLowerCase(keyValue.first);
         std::string value = strTrim(keyValue.second);
         if (key.empty() || key.find_first_of(" \t") != std::string::npos || key.find_last_of(" \t") != std::string::npos)
-            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
+            throw 400;
         if (headers.find(key) != headers.end())
             headers[key] += "," + value;
         else
             headers[key] = value;
-        std::clog << "DEBUG: " << key << ": " << value << "\n";
-        line = readLine();
+        line = getLineAsString(readLine());
     }
+
+    bool transferEncodingFound = headers.count("transfer-encoding");
+    if (transferEncodingFound && toLowerCase(headers["transfer-encoding"]) != "chunked") { throw 501; }
+    isChunked = transferEncodingFound && toLowerCase(headers["transfer-encoding"]) == "chunked";
+    if (isChunked && headers.count("content-length")) { throw 400; }
+    if (method == "POST" && !isChunked && !headers.count("content-length")) { throw 400; }
+    
+    std::set<std::string> AllowedMethods = getConfig().allowed_methods; // check if server block allow a method
+    if (AllowedMethods.find(method) == AllowedMethods.end()) {
+        throw 405;
+    }   
+    if (headers.count("host") == 0) { throw 400; }
+
     state = BODY;
-    if (!headers.count("host"))
-        throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
     bodyStart = _pos;
     return (_pos - startPos);
 }
 
-//curl -H "Tranfert-Encoding: chunked" -F "filename=/path" 127.0.0.1:8080 (for testing POST)
-size_t    HttpRequest::parseBody()
-{
+std::string getFancyFilename() {
+    static std::atomic<uint64_t> counter(0);
+    std::time_t now = std::time(0);
+    std::tm* gmt = std::gmtime(&now);
+    char buffer[100];
+    std::strftime(buffer, sizeof(buffer), "%a-%d-%b-%Y-%H:%M:%S-GMT", gmt);
+    return std::string(buffer) + "-" + std::to_string(counter++);
+}
+
+size_t HttpRequest::parseBody() {
     size_t startPos = _pos;
-    if (headers.count("transfer-encoding") && toLowerCase(headers["transfer-encoding"]).find("chunked") != std::string::npos)
-    {
-        if (headers.count("content-length"))
-            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 33\r\n\r\nConflicting Transfer-Encoding and Content-Length"));
-        return (parseChunkedBody());
+
+    if (isChunked) {
+        return parseChunkedBody();
     }
-    else if (headers.count("content-length"))
-    {
-        int contentLength = std::atoi(headers["content-length"].c_str());
-        if (_bufferLen - _pos < contentLength)
-            throw (HttpIncompleteRequest());
-        body.append(_buffer + _pos, contentLength);
-        _pos += contentLength;
+
+    long contentLength;
+    try { contentLength = std::stol(headers["content-length"]); }
+    catch (...) { throw 400; }
+    if (contentLength > getConfig().max_body_size) { throw 413; }
+
+    if (_bufferLen - _pos < static_cast<size_t>(contentLength)) {
+        throw (HttpIncompleteRequest());
     }
+
+    // // Store body for CGI
+    body.insert(body.end(), _buffer + _pos, _buffer + _pos + contentLength);
+    std::ofstream ofile(getUploadDir() + "FILE_" + getFancyFilename(), std::ios::binary);
+    if (!ofile.is_open()) { throw 500; }
+    ofile.write((const char*)(_buffer + _pos), contentLength);
+    ofile.close();
+
+    _pos += contentLength;
     state = COMPLETE;
     return (_pos - startPos);
 }
 
-size_t    HttpRequest::parseChunkedBody()
-{
+// still not tested with partial chunked requests
+size_t HttpRequest::parseChunkedBody() {
     size_t startPos = _pos;
-    while (true)
-    {
-        std::string line = readLine();
-        int chunkSize = _16_to_10(line);
-        if (chunkSize < 0)
-            throw (HttpRequestError("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nMalformed header field"));
-        else if (chunkSize == 0)
-        {
-            readLine();
-            break ;
+    
+    if (!fileCreated) {
+        outfilename = getUploadDir() + "XFILE_" + getFancyFilename();
+        fileCreated = true;
+    }
+    std::ofstream ofile(outfilename, std::ios::app | std::ios::binary);
+    if (!ofile.is_open()) { throw 500; }
+
+    try {
+        while (_pos < _bufferLen) {
+            if (_currentChunkSize == -1) {
+                std::string sizeStr = getLineAsString(readLine());
+                _currentChunkSize = _16_to_10(sizeStr);
+                if (_currentChunkSize < 0) { throw 400; }
+                else if (_currentChunkSize == 0) {
+                    state = COMPLETE;
+                    readLine();
+                    break;
+                }
+                _totalBodysize += _currentChunkSize;
+                if (_totalBodysize > getConfig().max_body_size) {
+                    std::remove(outfilename.c_str());
+                    throw 413; 
+                }
+            }
+            size_t remainingInChunk = _currentChunkSize - _currentChunkBytesRead;
+            size_t availableData = _bufferLen - _pos;
+            size_t bytesToRead = std::min(remainingInChunk, availableData);
+
+            if (bytesToRead == 0) {
+                throw HttpIncompleteRequest();
+            }
+            body.insert(body.end(), _buffer + _pos, _buffer + _pos + bytesToRead);
+            ofile.write((const char*)(_buffer + _pos), bytesToRead);
+            if (ofile.bad()) {
+                std::remove(outfilename.c_str());
+                throw 500;
+            }
+            _pos += bytesToRead;
+            _currentChunkBytesRead += bytesToRead;
+
+            if (_currentChunkBytesRead == _currentChunkSize) {
+                readLine();
+                _currentChunkSize = -1;
+                _currentChunkBytesRead = 0;
+            }
         }
-        if (_bufferLen - _pos < chunkSize + 2)
-            throw (HttpIncompleteRequest());
-        body.append(_buffer + _pos, chunkSize);
-        _pos += chunkSize + 2;
+    } catch (const HttpIncompleteRequest&) {
+        ofile.close();
+        return (_pos - startPos);
     }
-    state = COMPLETE;
+    ofile.close();
     return (_pos - startPos);
 }
 
-std::string HttpRequest::readLine()
+
+std::vector<uint8_t> HttpRequest::readLine()
 {
+    std::vector<uint8_t> lineBuffer;
     size_t start = _pos;
+
     while (_pos < _bufferLen)
     {
         if (_buffer[_pos] == '\r' && _pos + 1 < _bufferLen && _buffer[_pos + 1] == '\n')
         {
-            std::string line(_buffer + start, _pos - start);
+            lineBuffer.insert(lineBuffer.end(), _buffer + start, _buffer + _pos);
             _pos += 2;
-            return (line);
+            return (lineBuffer);
         }
         _pos++;
     }

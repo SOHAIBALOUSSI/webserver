@@ -30,7 +30,9 @@ public:
 
     const std::string& getHost( void )  const;
     const std::set<int>& getPorts( void ) const;
-
+    std::map<std::string, Route>& getRoutes() { return routes; }
+    std::map<int, std::string>& getErrorPages() { return error_pages; }
+    std::set<std::string>& getAllowedMethods() { return allowed_methods; }
 };
 
 std::string readConfigFile(std::string path);

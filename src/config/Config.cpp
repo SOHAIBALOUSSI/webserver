@@ -1,8 +1,6 @@
 #include "../../include/Config.hpp"
 
-Config::Config() {
-    max_body_size = std::numeric_limits<unsigned long long>::max();
-}
+Config::Config() : max_body_size(1048576) {} // 1MB
 
 
 std::string readConfigFile(std::string path) {
@@ -15,7 +13,6 @@ std::string readConfigFile(std::string path) {
     std::string line;
     while (std::getline(file, line))
         config_content += line + "\n";
-        // std::cerr << config_content.size() << std::endl;
     if (config_content.size() == 0)
         throw std::runtime_error("Empty configuration file");
     return config_content;
@@ -179,16 +176,13 @@ void    Config::insertRoute(std::string value) {
         std::string key = rule.substr(0, rule.find('='));
         if (!validRouteRule(key))
             throw std::runtime_error("ROUTE ERROR: invalid route rule");
-        // parse value 3la 7sab lkey
         std::string value = rule.substr(rule.find('=') + 1);
         if (value.empty())
             throw std::runtime_error("ROUTE ERROR: empty route rule value");
         if (key == "ROOT") {
             route.root = rule.substr(rule.find('=') + 1);
-            if (route.root.back() != '/')
-                route.root += "/";
         }
-        else if (key == "ALLOWED_METHODES") {
+        else if (key == "ALLOWED_METHODS") {
             std::istringstream methodStream(value);
             std::string method;
             while (std::getline(methodStream, method, '-')) {
@@ -199,7 +193,6 @@ void    Config::insertRoute(std::string value) {
                 route.allowed_methods.insert(method);
             }
         }
-
         else if (key == "REDIRECT") { route.redirect = value; }
         else if (key == "DEFAULT_FILE") { route.default_file = value; }
         else if (key == "DIR_LISTING") {
@@ -233,8 +226,6 @@ void    Config::insertRoute(std::string value) {
         }
         else if (key == "UPLOAD_DIR") {
             route.upload_dir = value;
-            if (route.upload_dir.back() != '/')
-                route.upload_dir += "/";
         }        
     }
     routes[path] = route;

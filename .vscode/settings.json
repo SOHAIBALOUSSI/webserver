@@ -43,7 +43,6 @@
     "list": "cpp",
     "map": "cpp",
     "set": "cpp",
-    "unordered_map": "cpp",
     "unordered_set": "cpp",
     "vector": "cpp",
     "exception": "cpp",
@@ -93,6 +92,7 @@
     "spanstream": "cpp",
     "stacktrace": "cpp",
     "stdfloat": "cpp",
-    "text_encoding": "cpp"
+    "text_encoding": "cpp",
+    "unordered_map": "cpp"
   }
 }

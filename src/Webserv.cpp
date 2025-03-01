@@ -70,7 +70,6 @@ std::vector<Config> parseConfigFile(std::string configFile) {
     return (serverPool);
 }
 
-
 int main(int ac, char **av) {
     std::string config_path = (ac > 1) ? av[1] : "webserv.conf";
     std::string configFile;
