@@ -89,7 +89,7 @@ unsigned    checkFilePerms(std::string& path) {
 long getFileContentLength(std::string& path) {
     struct stat fileStat;
     if (stat(path.c_str(), &fileStat) != 0) {
-        std::cerr << "cannot access file at " << path << std::endl;
+        std::cerr << "ERROR: Cannot access file at " << path << std::endl;
         return -1;
     }
     return fileStat.st_size;
@@ -98,10 +98,8 @@ long getFileContentLength(std::string& path) {
 
 std::string getCurrentDateHeader() {
     std::time_t now = std::time(0);
-    // Convert to GMT/UTC time
     std::tm* gmt = std::gmtime(&now);
     char buffer[100];
-    // Format the date according to IMF-fixdate (RFC 7231)
     std::strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", gmt);
     return std::string(buffer);
 }
@@ -118,7 +116,7 @@ std::string HttpResponse::combineHeaders() {
 }
 
 std::string getConnetionType(std::map<std::string, std::string>& headers) {
-    auto it = headers.find("Connection");
+    std::map<std::string, std::string>::iterator it = headers.find("Connection");
     if (it == headers.end()) { return "close"; }
     if (it != headers.end()) {
         return it->second.empty() ? "close" : it->second;
@@ -126,7 +124,7 @@ std::string getConnetionType(std::map<std::string, std::string>& headers) {
     return "close";
 }
 
-void    HttpResponse::prepareHeaders(std::string& path, HttpRequest& request) {
+void    HttpResponse::prepareHeaders(std::string& path) {
     contentType = getContentType(path);
     contentLength = getFileContentLength(path);
     if (contentLength == -1) { statusCode = 500; }
@@ -150,16 +148,15 @@ void HttpResponse::generateAutoIndex(std::string& path, HttpRequest& request) {
         struct dirent *ent;
         while ((ent = readdir(dir)) != NULL) {
             std::string name = ent->d_name;
-            if (name == ".") continue; // i can also skip ".."
+            if (name == ".") continue;
             std::string fullPath = path + name;
             struct stat statbuf;
             if (stat(fullPath.c_str(), &statbuf) == 0) {
                 autoIndexContent += "<a href=\"" + name + (S_ISDIR(statbuf.st_mode) ? "/" : "") + "\">" + name + "</a>\n";
             }
         }
-        if (-1 == closedir(dir)) {
-            std::cout << "not closed\n";
-        }
+        if (-1 == closedir(dir))
+            std::cout << "ERROR: Can't close\n";
     }
     
     autoIndexContent += "</pre><hr></body></html>";
@@ -180,6 +177,11 @@ void HttpResponse::generateAutoIndex(std::string& path, HttpRequest& request) {
 }
 
 void HttpResponse::POST(HttpRequest& request) {
+    if (request.getHeaders().count("content-type") && !request.isImplemented(request.getHeaders()["content-type"])){
+        statusCode = 501;
+        setErrorPage(request.getConfig().getErrorPages());
+        return ;
+    }
     if (statusCode == 200) {
         statusCode = 201;
         std::stringstream ss;
@@ -219,7 +221,7 @@ void HttpResponse::GET(HttpRequest& request) {
         if (!defaultFile.empty() && checkFilePerms(pathToIndex) == 200)
         {
             request.setURIpath(pathToIndex);
-            prepareHeaders(request.getUriPath(), request);
+            prepareHeaders(request.getUriPath());
         }
         else {
             if (request.getautoIndex() == true) {
@@ -234,7 +236,7 @@ void HttpResponse::GET(HttpRequest& request) {
     }
 
     if (code == 200) {
-        prepareHeaders(path, request);
+        prepareHeaders(path);
     }
     else {
         setErrorPage(request.getConfig().getErrorPages());
@@ -288,8 +290,6 @@ void    HttpResponse::setErrorPage(std::map<int, std::string>& ErrPages) {
 
 void    HttpResponse::DELETE(HttpRequest& request) {
     if (statusCode == 200) {
-        // cgi ??
-    
         if (isDirectory(requestedContent) || requestedContent.find(request.getUploadDir()) != 0) {
             statusCode = 403;
             setErrorPage(request.getConfig().getErrorPages());
@@ -565,4 +565,16 @@ void  HttpResponse::generateResponse(HttpRequest& request) {
         POST(request);
     else if (method == "DELETE")
         DELETE(request);
+}
+
+
+void    HttpResponse::reset() {
+    requestedContent.clear();
+    statusCode = 200;
+    contentLength = 0;
+    contentType = "text/html";
+    responseHeaders.clear();
+    responseBody.clear();
+    Date.clear();
+    Connection.clear();
 }

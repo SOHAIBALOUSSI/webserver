@@ -58,7 +58,7 @@ int _16_to_10(std::string str)
     return (-1);
   int result = 0;
   std::string trimmed = strTrim(str);
-  for (int i = 0; i < trimmed.size(); i++)
+  for (size_t i = 0; i < trimmed.size(); i++)
   {
     if (!isHexDigit(trimmed[i]))
       return -1;

@@ -53,7 +53,7 @@ class ServerManager
         void    shutDownManager();
 
     public  :
-        void LOG(int status, HttpRequest& request, HttpResponse& response);
+        void LOG(long statusCode, HttpRequest& request);
         ServerManager();
         ServerManager(const std::vector<Config>& _serverPool);
         ~ServerManager();

@@ -3,15 +3,16 @@
 #include <algorithm>
 #include <stdexcept>
 
-HttpRequest::HttpRequest() : state(REQUESTLINE), _pos(0), _bufferLen(0) {}
+HttpRequest::HttpRequest() : _pos(0), _bufferLen(0), state(REQUESTLINE) {}
 
 HttpRequest::~HttpRequest() {}
 
 HttpRequest::HttpRequest(const Config& _configs)
-    : state(REQUESTLINE), _pos(0), _bufferLen(0),
-        configs(_configs), statusCode(200), originalUri(),
-        autoIndex(false), _currentChunkSize(-1), _currentChunkBytesRead(0),
-        fileCreated(0), isChunked(0), _totalBodysize(0) {}
+    :   _pos(0), _bufferLen(0),
+        configs(_configs),
+        autoIndex(false),statusCode(200),
+        fileCreated(0),_currentChunkSize(-1),_totalBodysize(0), _currentChunkBytesRead(0),  isChunked(0), state(REQUESTLINE) {}
+
 
 
 size_t HttpRequest::parse(const uint8_t *buffer, size_t bufferLen) {
@@ -19,25 +20,20 @@ size_t HttpRequest::parse(const uint8_t *buffer, size_t bufferLen) {
     this->_buffer = buffer;
     size_t bytesReceived = 0;
     try {
-        if (state == REQUESTLINE) {
+        if (state == REQUESTLINE)
             bytesReceived += parseRequestLine();
-            
-        }
-        if (state == HEADERS) {
+        if (state == HEADERS)
             bytesReceived += parseHeaders();
-           
-        }
         if (state == BODY) {
             if (headers.count("content-length") || isChunked) {
                 bytesReceived += parseBody();
 
             } else {
-                state = COMPLETE; // No body for GET/DELETE
+                state = COMPLETE;
             }
         }
-        if (state == COMPLETE) {
-            return bytesReceived; // Return total bytes parsed
-        }
+        if (state == COMPLETE)
+            return bytesReceived;
     } catch (int code) {
         setStatusCode(code);
         request.clear();
@@ -268,7 +264,7 @@ size_t    HttpRequest::parseHeaders()
     isChunked = transferEncodingFound && toLowerCase(headers["transfer-encoding"]) == "chunked";
     if (isChunked && headers.count("content-length")) { throw 400; }
     if (method == "POST" && !isChunked && !headers.count("content-length")) { throw 400; }
-    
+
     std::set<std::string> AllowedMethods = getConfig().allowed_methods; // check if server block allow a method
     if (AllowedMethods.find(method) == AllowedMethods.end()) {
         throw 405;
@@ -281,7 +277,7 @@ size_t    HttpRequest::parseHeaders()
 }
 
 std::string getFancyFilename() {
-    static std::atomic<uint64_t> counter(0);
+    static long counter = 0;
     std::time_t now = std::time(0);
     std::tm* gmt = std::gmtime(&now);
     char buffer[100];
@@ -296,7 +292,7 @@ size_t HttpRequest::parseBody() {
         return parseChunkedBody();
     }
 
-    long contentLength;
+    unsigned long long contentLength;
     try { contentLength = std::stol(headers["content-length"]); }
     catch (...) { throw 400; }
     if (contentLength > getConfig().max_body_size) { throw 413; }
@@ -304,14 +300,11 @@ size_t HttpRequest::parseBody() {
     if (_bufferLen - _pos < static_cast<size_t>(contentLength)) {
         throw (HttpIncompleteRequest());
     }
-
-    // // Store body for CGI
     body.insert(body.end(), _buffer + _pos, _buffer + _pos + contentLength);
     std::ofstream ofile(getUploadDir() + "FILE_" + getFancyFilename(), std::ios::binary);
     if (!ofile.is_open()) { throw 500; }
     ofile.write((const char*)(_buffer + _pos), contentLength);
     ofile.close();
-
     _pos += contentLength;
     state = COMPLETE;
     return (_pos - startPos);
@@ -361,7 +354,7 @@ size_t HttpRequest::parseChunkedBody() {
             _pos += bytesToRead;
             _currentChunkBytesRead += bytesToRead;
 
-            if (_currentChunkBytesRead == _currentChunkSize) {
+            if (_currentChunkBytesRead == (size_t)_currentChunkSize) {
                 readLine();
                 _currentChunkSize = -1;
                 _currentChunkBytesRead = 0;
@@ -403,7 +396,52 @@ std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string
     return (std::make_pair(key, value));
 }
 
-bool    HttpRequest::isRequestComplete()
-{
-    return (state == COMPLETE);
+std::string HttpRequest::getUploadDir() {
+    Route& routeConf = getConfig().getRoutes()[RequestrouteKey];
+    if (!routeConf.upload_dir.empty()) {
+        return std::string(routeConf.upload_dir);
+    }
+    return "www/html/uploads/";
+}
+
+bool HttpRequest::isImplemented(std::string str) {
+    if (str.find("multipart/form-data") != std::string::npos) return false;
+    return true;
+}
+
+void    HttpRequest::reset() {
+    _buffer = 0;
+    _bufferLen = 0;
+    bodyStart = 0;
+    defaultIndex.clear();
+    autoIndex = false;
+    statusCode = 200;
+    fileCreated = false;
+    outfilename.clear();
+    _currentChunkSize = -1;
+    _totalBodysize = 0;
+    _currentChunkBytesRead = 0;
+    method.clear();
+    uriPath.clear();
+    version.clear();
+    body.clear();
+    uri.clear();
+    request.clear();
+    originalUri.clear();
+    uriQueryParams.clear();
+    headers.clear();
+    RequestrouteKey.clear();
+    isChunked = false;
+    keepAlive = true;
+    _pos = 0;
+    autoIndex = false;
+    state = REQUESTLINE;
+}
+
+std::string HttpRequest::getLineAsString(const std::vector<uint8_t>& line) {
+    return std::string(reinterpret_cast<const char*>(line.data()), line.size());
+}
+
+std::string     HttpRequest::getHeaderValue(std::string key) {
+    return headers.find(key) != headers.end() ? headers[key] : "nah"; 
 }

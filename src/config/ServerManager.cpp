@@ -3,7 +3,7 @@
 
 static ServerManager *g_manager = NULL;
 
-ServerManager::ServerManager() : epollFd(-1), events() {}
+ServerManager::ServerManager() : events(), epollFd(-1) {}
 
 void    ServerManager::shutDownManager()
 {
@@ -53,12 +53,12 @@ Server* ServerManager::findServerBySocket(int fd)
 {
     if (fd < 0)
         return (NULL);
-    for (int i = 0; i < servers.size(); i++)
+    for (size_t i = 0; i < servers.size(); i++)
     {
         if (isListeningSocket(fd))
         {
             const std::vector<Socket*>& listeningSockets = servers[i]->getListeningSockets();
-            for (int j = 0; j < listeningSockets.size(); j++)
+            for (size_t j = 0; j < listeningSockets.size(); j++)
             {
                 if (listeningSockets[j]->getFd() == fd)
                     return (servers[i]);
@@ -68,7 +68,7 @@ Server* ServerManager::findServerBySocket(int fd)
         {
             const std::vector<int>& clientSockets = servers[i]->getClientSockets();     
             std::find(clientSockets.begin(), clientSockets.end(), fd);  
-            for (int k = 0; k < clientSockets.size(); k++)
+            for (size_t k = 0; k < clientSockets.size(); k++)
             {
                 if (clientSockets[k] == fd)
                     return (servers[i]);
@@ -140,115 +140,107 @@ void ServerManager::modifyEpollEvent(int fd, uint32_t events) {
     }
 }
 
-void ServerManager::LOG(int status, HttpRequest& request, HttpResponse& response) {
+void ELOG(std::string emsg) {
+    std::cerr << emsg << std::endl; 
+}
+
+void ServerManager::LOG(long statusCode, HttpRequest& request) {
     std::string statusColor = CYAN;
 
-    if (response.statusCode >= 400) { statusColor = RED; }
-    else if (response.statusCode >= 300) { statusColor = BLUE; }
-    else if (response.statusCode >= 200) { statusColor = GREEN; }
+    if (statusCode >= 400) { statusColor = RED; }
+    else if (statusCode >= 300) { statusColor = BLUE; }
+    else if (statusCode >= 200) { statusColor = GREEN; }
+    
     std::cout << statusColor << timeStamp() 
                 << statusColor << request.getMethod() << " " 
                 << statusColor << request.getURI() << " " 
-                << statusColor << response.statusCode << " " 
-                << HttpResponse::statusCodesMap[response.statusCode] << RESET << std::endl;
+                << statusColor << statusCode << " " 
+                << HttpResponse::statusCodesMap[statusCode] << RESET << std::endl;
 }
 
 void ServerManager::sendResponse(int clientSocket) {
-    std::map<int, Client>::iterator It = Clients.find(clientSocket);
-    if (It == Clients.end()) return;
+    std::map<int, Client>::iterator it = Clients.find(clientSocket);
+    if (it == Clients.end()) return;
     
-    Client& client = It->second;
+    Client& client = it->second;
     HttpResponse& response = client.getResponse();
     
     switch (client.getClientState()) {
         case GENERATING_RESPONSE: {
             client.setKeepAlive(client.shouldKeepAlive());
-            client.sendBuffer = response.responseHeaders;
-            response.responseHeaders.clear();
-            client.setState(SENDING_HEADERS);
+            
+            if (response.getStatuscode() < 400 && response.getResponseBody().empty()) {
+                client.file.open(client.getRequest().getUriPath().c_str(), std::ios::binary);
+                if (!client.file.is_open()) {
+                    ELOG("Failed to open file: "+client.getRequest().getUriPath());
+                    client.setState(COMPLETED);
+                    break;
+                }
+                
+                client.sendBuffer = response.getResponseHeaders();
+            } else {
+                client.sendBuffer = response.getResponseHeaders();
+                client.sendBuffer += response.getResponseBody();
+                response.getResponseBody().clear();
+            }
+            
+            response.getResponseHeaders().clear();
+            client.sendOffset = 0;
+            client.setState(SENDING_DATA);
             break;
         }
-        case SENDING_HEADERS: {
-            ssize_t bytesSent = send(clientSocket, client.sendBuffer.c_str() + client.sendOffset,
-                                    client.sendBuffer.size() - client.sendOffset, MSG_NOSIGNAL);
-            if (bytesSent < 0) {
-                std::cerr << "Send headers failed: " << strerror(errno) << "\n";
-                return closeConnection(clientSocket);
-            }
-            client.sendOffset += bytesSent;
-            if (client.sendOffset >= client.sendBuffer.size()) {
-                client.sendBuffer.clear();
-                client.sendOffset = 0;
-                if (!response.responseBody.empty()) {
-                    client.sendBuffer = response.responseBody;
-                    client.setState(SENDING_BODY);
-                } else if (response.statusCode < 400) {
-                    client.file.open(client.getRequest().getUriPath().c_str(), std::ios::binary);
-                    if (!client.file.is_open()) {
-                        // std::cerr << "Failed to open file: " << client.getRequest().getUriPath() << "\n";
-                        client.setState(COMPLETED);
-                    } else {
-                        client.setState(SENDING_BODY);
-                    }
-                } else {
-                    client.setState(COMPLETED);
-                }
-            }
-            break;
-        }
-        case SENDING_BODY: {
-            if (client.sendBuffer.empty()) {
-                if (client.file.is_open()) {
-                    char buffer[8192];
-                    client.file.read(buffer, 8192);
-                    std::streamsize bytesRead = client.file.gcount();
-                    if (bytesRead > 0) {
-                        client.sendBuffer.append(buffer, bytesRead);
-
-                    } else {
-                        client.file.close();
-                        client.setState(COMPLETED);
-                    }
-                } else {
-                    client.setState(COMPLETED);
-                }
-            }
-
+        
+        case SENDING_DATA: {
             if (!client.sendBuffer.empty()) {
-                ssize_t bytesSent = send(clientSocket, client.sendBuffer.c_str() + client.sendOffset,
-                                        client.sendBuffer.size() - client.sendOffset, MSG_NOSIGNAL);
-                if (bytesSent < 0) {
-                    std::cerr << "Send body failed: " << strerror(errno) << "\n";
-                    return closeConnection(clientSocket);
-                }
+                ssize_t bytesSent = send(clientSocket, 
+                                        client.sendBuffer.c_str() + client.sendOffset, 
+                                        client.sendBuffer.size() - client.sendOffset, 
+                                        MSG_NOSIGNAL);
+                if (bytesSent < 0)
+                    return ELOG("Send failed"), closeConnection(clientSocket);
+        
                 client.sendOffset += bytesSent;
                 if (client.sendOffset >= client.sendBuffer.size()) {
                     client.sendBuffer.clear();
-                    client.sendOffset = 0;
-                    if (!client.file.is_open()) {
+                    client.sendOffset = 0; 
+                    if (!client.file.is_open())
                         client.setState(COMPLETED);
-                    }
+                }
+            }
+            
+            if (client.sendBuffer.empty() && client.file.is_open()) {
+                char buffer[READ_BUFFER_SIZE];
+                client.file.read(buffer, READ_BUFFER_SIZE);
+                std::streamsize bytesRead = client.file.gcount();
+
+                if (bytesRead > 0) {
+                    client.sendBuffer.append(buffer, bytesRead);
+                } else {
+                    client.file.close();
+                    client.setState(COMPLETED);
                 }
             }
             break;
         }
+
         case COMPLETED: {
-            if (client.file.is_open()) {
+            if (client.file.is_open())
                 client.file.close();
-            }
-            if (response.statusCode == 301 || response.statusCode == 201) {
+            
+            LOG(response.getStatuscode(), client.request);
+            if (response.getStatuscode() == 301 || response.getStatuscode() == 201)
                 return closeConnection(clientSocket);
+            
+            if (client.getKeepAlive()) {
+                client.resetState();
+                client.setState(READING_REQUEST);
+                modifyEpollEvent(clientSocket, EPOLLIN);
+            } else {
+                closeConnection(clientSocket);
             }
-            ////// KEEP THIS DONT DELETE IT !!!!!!!!!!!!!!    
-            // if (client.getKeepAlive()) {
-            //     client.resetState();
-            //     client.setState(READING_REQUEST);
-            //     modifyEpollEvent(clientSocket, EPOLLIN);
-            // } else {
-            // }
-            closeConnection(clientSocket); // Adjust for keep-alive later if needed
             break;
         }
+        
         default:
             break;
     }
@@ -306,9 +298,8 @@ void ServerManager::readRequest(Client& Client) {
         std::clog << ERROR << timeStamp()<< "ERROR: receiving data in client socket N" << clientFd << "\n" << RESET;
         return closeConnection(clientFd);
     }
-    else if (bytesReceived == 0) {
+    else if (bytesReceived == 0)
         return closeConnection(clientFd);
-    }
 
     std::vector<uint8_t>& requestBuffer = request.getRequestBuffer();
     requestBuffer.insert(requestBuffer.end(), buffer, buffer + bytesReceived);
@@ -331,9 +322,7 @@ void ServerManager::handleRequest(int clientSocket)
         if (request.getState() == COMPLETE) {
             client.setState(GENERATING_RESPONSE);
             response.generateResponse(request);
-
-            LOG(request.getStatusCode(), request, response);
-            
+                
             modifyEpollEvent(clientSocket, EPOLLOUT);
         }
     }
@@ -354,19 +343,22 @@ void ServerManager::handleEvent(const epoll_event& event) {
         else
             handleRequest(fd);
     }
-    if (event.events & EPOLLOUT) 
+    if (event.events & EPOLLOUT) {
         sendResponse(fd);
+
+    }
+    
 }
 
 void    ServerManager::eventsLoop()
 {
     while (1) {
-        int eventsNum = epoll_wait(epollFd, events.data(), events.size(), -1);
+        int eventsNum = epoll_wait(epollFd, events.data(), 1024, -1);
         if (eventsNum == -1){
             std::cerr << ERROR << timeStamp() << "ERROR: in epoll_wait: " << strerror(errno) << std::endl << RESET;
             continue ;
         }
-        if (eventsNum == events.size())
+        if ((size_t)eventsNum == events.size())
             events.resize(events.size() * 2);
 
         for (int i = 0; i < eventsNum; i++)
@@ -407,7 +399,8 @@ void ServerManager::initEpoll() {
     addListeningSockets(servers);
 }
 
-ServerManager::ServerManager(const std::vector<Config>& _serverPool) : serverPool(_serverPool), epollFd(-1), events(0)
+ServerManager::ServerManager(const std::vector<Config>& _serverPool)
+: serverPool(_serverPool), events(0), epollFd(-1)
 {
     initServers();
     initEpoll();
