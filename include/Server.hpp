@@ -7,8 +7,6 @@
 class Server
 {
     private:
-        sockaddr_in server_addr;
-        int port;
         std::vector<int> clientSockets;
         std::vector<Socket*> listeningSockets;
         std::string host;

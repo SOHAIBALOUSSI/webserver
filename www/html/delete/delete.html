@@ -32,7 +32,7 @@
                         <a class="nav-link" href="../cgi/cgi.html">CGI Test</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="../404.html">Broken link</a>
+                        <a class="nav-link" href="k3k3">Broken link</a>
                     </li>
                 </ul>
             </div>
@@ -67,14 +67,10 @@
                     responseMessage.textContent = `File ${filename} is deleted successfully.`
                     if (response.status >= 400)
                     {
-                        responseMessage.textContent = "Error: " + response.statusText;
+                        responseMessage.textContent = "Error2: " + response.statusText;
                         responseMessage.style.color = "red";
                     }
                 })
-                .catch(error => {
-                    responseMessage.textContent = "Error: " + error;
-                    responseMessage.style.color = "red";
-                });
         });
     </script>
 

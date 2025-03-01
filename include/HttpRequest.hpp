@@ -8,15 +8,6 @@ class HttpIncompleteRequest : public std::exception
     virtual const char * what() const throw() {return "Need more data to complete request";}
 };
 
-class HttpRequestError : public std::exception 
-{
-    private:
-        std::string _msg;
-    public:
-        HttpRequestError(const std::string& msg) : _msg(msg) {}
-        virtual const char* what() const throw() { return _msg.c_str(); }
-};
-
 enum parsingState
 {
     REQUESTLINE,
@@ -37,7 +28,7 @@ class HttpRequest
         bool    fileCreated;
         std::string outfilename;
         int     _currentChunkSize;
-        long long _totalBodysize;
+        unsigned long long _totalBodysize;
         size_t _currentChunkBytesRead;  
         std::string method, uri, uriPath, version;
         std::vector<uint8_t> body;
@@ -86,9 +77,7 @@ class HttpRequest
         long  getStatusCode() { return statusCode; }
         std::string getOriginalUri() { return originalUri; }
 
-        std::string     getHeaderValue(std::string key) {
-            return headers.find(key) != headers.end() ? headers[key] : "nah"; 
-        }
+        std::string     getHeaderValue(std::string key);
         std::string& getMethod() { return method; }
         std::string& getURI() { return uri; }
         std::string& getVersion() { return version; }
@@ -104,13 +93,13 @@ class HttpRequest
         void    setURIpath(const std::string& _uripath) { uriPath = _uripath; }
         void  setBodyStartPos(size_t value) { bodyStart = value; }
         std::vector<uint8_t>& getRequestBuffer() { return request; }
+        
         //main parsing
         size_t    parse(const uint8_t *buffer, size_t bufferLen);
-        
-        std::string getLineAsString(const std::vector<uint8_t>& line) {
-            return std::string(reinterpret_cast<const char*>(line.data()), line.size());
-        }
-        bool    isRequestComplete();
+        std::string getLineAsString(const std::vector<uint8_t>& line);      
         std::string getUploadDir();
+        bool isImplemented(std::string str);
+        bool isFileCreated() {return fileCreated;}
         void    reset();
+        std::string getoutfilename() {return outfilename;}
 };

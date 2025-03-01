@@ -3,49 +3,38 @@
 #include <algorithm>
 #include <stdexcept>
 
-HttpRequest::HttpRequest() : state(REQUESTLINE), _pos(0), _bufferLen(0) {}
+HttpRequest::HttpRequest() : _pos(0), _bufferLen(0), state(REQUESTLINE) {}
 
 HttpRequest::~HttpRequest() {}
 
-HttpRequest::HttpRequest(const Config &_configs)
-    : state(REQUESTLINE), _pos(0), _bufferLen(0),
-      configs(_configs), statusCode(200), originalUri(),
-      autoIndex(false), _currentChunkSize(-1), _currentChunkBytesRead(0),
-      fileCreated(0), isChunked(0), _totalBodysize(0) {}
+HttpRequest::HttpRequest(const Config& _configs)
+    :   _pos(0), _bufferLen(0),
+        configs(_configs),
+        autoIndex(false),statusCode(200),
+        fileCreated(0),_currentChunkSize(-1),_totalBodysize(0), _currentChunkBytesRead(0),  isChunked(0), state(REQUESTLINE) {}
+
 
 size_t HttpRequest::parse(const uint8_t *buffer, size_t bufferLen)
 {
     this->_bufferLen = bufferLen;
     this->_buffer = buffer;
     size_t bytesReceived = 0;
-    try
-    {
+    try {
         if (state == REQUESTLINE)
-        {
             bytesReceived += parseRequestLine();
-        }
         if (state == HEADERS)
-        {
             bytesReceived += parseHeaders();
-        }
-        if (state == BODY)
-        {
-            if (headers.count("content-length") || isChunked)
-            {
+        if (state == BODY) {
+            if (headers.count("content-length") || isChunked) {
                 bytesReceived += parseBody();
-            }
-            else
-            {
-                state = COMPLETE; // No body for GET/DELETE
+
+            } else {
+                state = COMPLETE;
             }
         }
         if (state == COMPLETE)
-        {
-            return bytesReceived; // Return total bytes parsed
-        }
-    }
-    catch (int code)
-    {
+            return bytesReceived;
+    } catch (int code) {
         setStatusCode(code);
         request.clear();
         state = COMPLETE;
@@ -287,7 +276,7 @@ std::string HttpRequest::decodeAndNormalize()
     std::istringstream iss(uriPath);
     std::string segment;
     std::string decodedAndNormalized;
-    bool hasTrailingSlash = uriPath.back() == '/';
+    bool hasTrailingSlash = uriPath[uriPath.size() - 1] == '/';
 
     while (std::getline(iss, segment, '/'))
         decodedAndNormalized += "/" + decode(segment);
@@ -340,14 +329,8 @@ size_t HttpRequest::parseHeaders()
         throw 501;
     }
     isChunked = transferEncodingFound && toLowerCase(headers["transfer-encoding"]) == "chunked";
-    if (isChunked && headers.count("content-length"))
-    {
-        throw 400;
-    }
-    if (method == "POST" && !isChunked && !headers.count("content-length"))
-    {
-        throw 400;
-    }
+    if (isChunked && headers.count("content-length")) { throw 400; }
+    if (method == "POST" && !isChunked && !headers.count("content-length")) { throw 400; }
 
     std::set<std::string> AllowedMethods = getConfig().allowed_methods; // check if server block allow a method
     if (AllowedMethods.find(method) == AllowedMethods.end())
@@ -364,14 +347,13 @@ size_t HttpRequest::parseHeaders()
     return (_pos - startPos);
 }
 
-std::string getFancyFilename()
-{
-    static std::atomic<uint64_t> counter(0);
+std::string getFancyFilename() {
+    static long counter = 0;
     std::time_t now = std::time(0);
     std::tm *gmt = std::gmtime(&now);
     char buffer[100];
     std::strftime(buffer, sizeof(buffer), "%a-%d-%b-%Y-%H:%M:%S-GMT", gmt);
-    return std::string(buffer) + "-" + std::to_string(counter++);
+    return std::string(buffer) + "-" + toString(counter++);
 }
 
 size_t HttpRequest::parseBody()
@@ -383,35 +365,25 @@ size_t HttpRequest::parseBody()
         return parseChunkedBody();
     }
 
-    long contentLength;
-    try
-    {
-        contentLength = std::stol(headers["content-length"]);
-    }
-    catch (...)
-    {
-        throw 400;
-    }
-    if (contentLength > getConfig().max_body_size)
-    {
-        throw 413;
-    }
+    unsigned long long contentLength;
+    try { contentLength = atoull(headers["content-length"]); }
+    catch (...) { throw 400; }
+    if (contentLength > getConfig().max_body_size) { throw 413; }
 
     if (_bufferLen - _pos < static_cast<size_t>(contentLength))
     {
         throw(HttpIncompleteRequest());
     }
-
-    // // Store body for CGI
     body.insert(body.end(), _buffer + _pos, _buffer + _pos + contentLength);
-    std::ofstream ofile(getUploadDir() + "FILE_" + getFancyFilename(), std::ios::binary);
+    
+    outfilename = getUploadDir() + "FILE_" + getFancyFilename();
+    std::ofstream ofile(outfilename.c_str(), std::ios::binary);
     if (!ofile.is_open())
     {
         throw 500;
     }
     ofile.write((const char *)(_buffer + _pos), contentLength);
     ofile.close();
-
     _pos += contentLength;
     state = COMPLETE;
     return (_pos - startPos);
@@ -427,7 +399,7 @@ size_t HttpRequest::parseChunkedBody()
         outfilename = getUploadDir() + "XFILE_" + getFancyFilename();
         fileCreated = true;
     }
-    std::ofstream ofile(outfilename, std::ios::app | std::ios::binary);
+    std::ofstream ofile(outfilename.c_str(), std::ios::app | std::ios::binary);
     if (!ofile.is_open())
     {
         throw 500;
@@ -476,8 +448,7 @@ size_t HttpRequest::parseChunkedBody()
             _pos += bytesToRead;
             _currentChunkBytesRead += bytesToRead;
 
-            if (_currentChunkBytesRead == _currentChunkSize)
-            {
+            if (_currentChunkBytesRead == (size_t)_currentChunkSize) {
                 readLine();
                 _currentChunkSize = -1;
                 _currentChunkBytesRead = 0;
@@ -520,7 +491,17 @@ std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string
     return (std::make_pair(key, value));
 }
 
-bool HttpRequest::isRequestComplete()
-{
-    return (state == COMPLETE);
+
+bool HttpRequest::isImplemented(std::string str) {
+    if (str.find("multipart/form-data") != std::string::npos) return false;
+    return true;
+}
+
+
+std::string HttpRequest::getLineAsString(const std::vector<uint8_t>& line) {
+    return std::string(reinterpret_cast<const char*>(line.data()), line.size());
+}
+
+std::string     HttpRequest::getHeaderValue(std::string key) {
+    return headers.find(key) != headers.end() ? headers[key] : "nah"; 
 }

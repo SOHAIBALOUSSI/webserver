@@ -11,37 +11,38 @@
 enum ClientState {
     READING_REQUEST,
     GENERATING_RESPONSE,
-    SENDING_HEADERS,
-    SENDING_BODY,
+    SENDING_DATA,
     COMPLETED
 };
 
 class Client {
     public:
         int client_fd;
-        std::string    sendBuffer;
-        size_t         sendOffset;
-        std::ifstream  file;
-        size_t          fileOffset;
+        Config& client_config;
         HttpRequest     request;
         HttpResponse    response;
+        size_t         sendOffset;
         ClientState     state;
         bool            keepAlive;
-        int serverPort;
-        Config& client_config;
         time_t          lastActivityTime;
         int             timeout;
+        std::string    sendBuffer;
+        std::ifstream  file;
+        size_t          fileOffset;
+        int serverPort;
 
         Client(int client_fd, Config& Conf);
+        Client(const Client& C);
         void resetState();
         int getFd() const { return client_fd; }
         bool    shouldKeepAlive();
+
         HttpRequest& getRequest() { return request; }
         HttpResponse& getResponse() { return response; }
         std::string& getSendBuffer() { return sendBuffer; }
         ClientState getClientState() { return state; }
 
-        void setKeepAlive(bool keep) { keepAlive = keep; }
+        void    setKeepAlive(bool keep) { keepAlive = keep; }
         bool    getKeepAlive() { return keepAlive; }
         void   setState(ClientState _state) { state = _state; }
         int getServerPort() const { return serverPort; }
