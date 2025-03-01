@@ -12,8 +12,7 @@ echo "<h1>Welcome to Home Page</h1>\n";
 echo "<p>Please enter your name and age:</p>\n";
 
 // Form to submit to contact.php via POST
-// echo "<form method='POST' action='/contact-us/contact.php' enctype=\"multipart/form-data\">\n";
-echo "<form method='POST' action='/contact-us/testPost.php'>\n";
+echo "<form method='POST' action='/cgi/testPost.php'>\n";
 echo "<label for='name'>Name:</label><br>\n";
 echo "<input type='text' id='name' name='name' value='' required><br>\n";
 echo "<label for='age'>Age:</label><br>\n";

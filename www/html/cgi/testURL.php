@@ -25,6 +25,6 @@ echo "</pre>\n";
 echo "</body>\n";
 echo "</html>\n";
 
-//for test on URL do : http://localhost:9999/contact-us/testURL.php?name=John&age=30
+//for test on URL do : http://localhost:9999/cgi/testURL.php?name=mohammed&age=30
 ?>
 

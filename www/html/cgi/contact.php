@@ -4,5 +4,5 @@
  	echo "result is 12\n";
  	echo "Hello from PHP!";
 
-	//for test do on url : http://localhost:9999/contact-us/contact.php
+	//for test do on url : http://http://localhost:9999/cgi/contact.php
 ?>
