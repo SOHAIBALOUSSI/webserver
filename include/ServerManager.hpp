@@ -51,6 +51,7 @@ class ServerManager
         void    handleSignals();
         static void    handleSignal(int sig);
         void    shutDownManager();
+        void    checkTimeouts();
 
     public  :
         void LOG(int status, HttpRequest& request, HttpResponse& response);

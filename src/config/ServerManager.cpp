@@ -240,13 +240,13 @@ void ServerManager::sendResponse(int clientSocket) {
                 return closeConnection(clientSocket);
             }
             ////// KEEP THIS DONT DELETE IT !!!!!!!!!!!!!!    
-            // if (client.getKeepAlive()) {
-            //     client.resetState();
-            //     client.setState(READING_REQUEST);
-            //     modifyEpollEvent(clientSocket, EPOLLIN);
-            // } else {
-            // }
-            closeConnection(clientSocket); // Adjust for keep-alive later if needed
+            if (client.getKeepAlive()) {
+                client.resetState();
+                client.setState(READING_REQUEST);
+                modifyEpollEvent(clientSocket, EPOLLIN);
+            } else {
+                closeConnection(clientSocket); // Adjust for keep-alive later if needed
+            }
             break;
         }
         default:
@@ -337,6 +337,7 @@ void ServerManager::handleRequest(int clientSocket)
             modifyEpollEvent(clientSocket, EPOLLOUT);
         }
     }
+    It->second.setLastActivity(time(NULL));
 }
 
 
@@ -358,10 +359,27 @@ void ServerManager::handleEvent(const epoll_event& event) {
         sendResponse(fd);
 }
 
+void    ServerManager::checkTimeouts()
+{
+    std::map<int, Client>::iterator it = Clients.begin();
+    while (it != Clients.end())
+    {
+        time_t now = time(NULL);
+        if (now - it->second.lastActivityTime >= it->second.timeout) {
+            std::clog << INFO << timeStamp() << "INFO: Connection timed out, client socket N" << it->first <<".\n" << RESET;
+            std::map<int, Client>::iterator toRem = it;
+            ++it;
+            closeConnection(toRem->first);
+            continue;
+        }
+        ++it;
+    }
+}
+
 void    ServerManager::eventsLoop()
 {
     while (1) {
-        int eventsNum = epoll_wait(epollFd, events.data(), events.size(), -1);
+        int eventsNum = epoll_wait(epollFd, events.data(), events.size(), 1000);
         if (eventsNum == -1){
             std::cerr << ERROR << timeStamp() << "ERROR: in epoll_wait: " << strerror(errno) << std::endl << RESET;
             continue ;
@@ -371,6 +389,7 @@ void    ServerManager::eventsLoop()
 
         for (int i = 0; i < eventsNum; i++)
             handleEvent(events[i]);
+        checkTimeouts();
     }
 }
 

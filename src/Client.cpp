@@ -1,26 +1,22 @@
 #include "../include/Client.hpp"
 
-Client::Client(int client_fd, Config &Conf)
-    : client_fd(client_fd), client_config(Conf), request(Conf), response(Conf), sendOffset(0), state(READING_REQUEST), keepAlive(1)
-{
-}
+Client::Client(int client_fd, Config& Conf)
+: client_fd(client_fd), client_config(Conf), request(Conf), response(Conf), sendOffset(0), state(READING_REQUEST), keepAlive(1), lastActivityTime(time(NULL)), timeout(60)
+{}
+
 
 bool Client::shouldKeepAlive()
 {
-    std::map<std::string, std::string>::iterator It = request.getHeaders().find("connection");
-    if (It != request.getHeaders().end())
-    {
-        std::string connectionValue = It->second;
-        if (connectionValue.find("close") != std::string::npos)
-        {
-            return false;
-        }
-        else if (connectionValue.find("keep-alive") != std::string::npos)
-        {
-            return true;
+    if (request.getHeaders().count("connection")) {
+        if (request.getHeaders()["connection"].find("keep-alive")) {
+            timeout = KEEP_ALIVE_TIMEOUT;
+            return (1);
+        } else {
+            timeout = DEFAULT_TIMEOUT;
+            return (0);
         }
     }
-    return true;
+    return 1;
 }
 
 void Client::resetState()

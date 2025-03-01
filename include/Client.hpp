@@ -5,6 +5,9 @@
 #include "HttpResponse.hpp"
 #include "Config.hpp"
 
+#define DEFAULT_TIMEOUT 30
+#define KEEP_ALIVE_TIMEOUT 60
+
 enum ClientState {
     READING_REQUEST,
     GENERATING_RESPONSE,
@@ -25,7 +28,10 @@ class Client {
         ClientState     state;
         bool            keepAlive;
         int serverPort;
-        Config& client_config; 
+        Config& client_config;
+        time_t          lastActivityTime;
+        int             timeout;
+
         Client(int client_fd, Config& Conf);
         void resetState();
         int getFd() const { return client_fd; }
@@ -40,4 +46,5 @@ class Client {
         void   setState(ClientState _state) { state = _state; }
         int getServerPort() const { return serverPort; }
         void setServerPort(int port) { serverPort = port; }
+        void setLastActivity(time_t time) { lastActivityTime = time; }
 };
