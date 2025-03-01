@@ -356,6 +356,17 @@ std::string getFancyFilename() {
     return std::string(buffer) + "-" + toString(counter++);
 }
 
+bool HttpRequest::isCreatFile() const
+{
+    size_t extPos = uriPath.rfind('.');
+    if (extPos == std::string::npos || extPos == uriPath.length() - 1) {
+        return false;
+    }
+    std::string ext = uriPath.substr(extPos);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return (ext == ".php" || ext == ".py" || ext == ".sh");
+}
+
 size_t HttpRequest::parseBody()
 {
     size_t startPos = _pos;
@@ -376,14 +387,13 @@ size_t HttpRequest::parseBody()
     }
     body.insert(body.end(), _buffer + _pos, _buffer + _pos + contentLength);
     
-    outfilename = getUploadDir() + "FILE_" + getFancyFilename();
-    std::ofstream ofile(outfilename.c_str(), std::ios::binary);
-    if (!ofile.is_open())
-    {
-        throw 500;
+    if (!isCreatFile()) {
+        outfilename = getUploadDir() + "FILE_" + getFancyFilename();
+        std::ofstream ofile(outfilename.c_str(), std::ios::binary);
+        if (!ofile.is_open()) { throw 500; }
+        ofile.write((const char *)(_buffer + _pos), contentLength);
+        ofile.close();
     }
-    ofile.write((const char *)(_buffer + _pos), contentLength);
-    ofile.close();
     _pos += contentLength;
     state = COMPLETE;
     return (_pos - startPos);
@@ -494,6 +504,7 @@ std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string
 
 bool HttpRequest::isImplemented(std::string str) {
     if (str.find("multipart/form-data") != std::string::npos) return false;
+    if (str.find("x-www-form-urlencoded") != std::string::npos) return false;
     return true;
 }
 

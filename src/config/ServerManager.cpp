@@ -82,10 +82,7 @@ void  ServerManager::setNonBlocking(int fd)
 {
     if (fd < 0)
         throw std::runtime_error(ERROR + timeStamp() + "ERROR: Invalid file descriptor: " + toString(fd) + std::string(RESET));
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1)
-        throw std::runtime_error(ERROR + timeStamp() + "ERROR: Getting flags for client socket: " + std::string(strerror(errno)) + std::string(RESET));
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK)) 
+    if (fcntl(fd, F_SETFL, O_NONBLOCK, O_CLOEXEC)) 
         throw std::runtime_error(ERROR + timeStamp() + "ERROR: Setting socket to non-blocking: " + std::string(strerror(errno)) + std::string(RESET));
 }
 
@@ -167,7 +164,6 @@ void ServerManager::sendResponse(int clientSocket) {
     
     switch (client.getClientState()) {
         case GENERATING_RESPONSE: {
-            client.setKeepAlive(client.shouldKeepAlive());
             
             if (response.getStatuscode() < 400 && response.getResponseBody().empty()) {
                 client.file.open(client.getRequest().getUriPath().c_str(), std::ios::binary);
@@ -196,7 +192,7 @@ void ServerManager::sendResponse(int clientSocket) {
                                         client.sendBuffer.size() - client.sendOffset, 
                                         MSG_NOSIGNAL);
                 if (bytesSent < 0)
-                    return ELOG("Send failed"), closeConnection(clientSocket);
+                    return closeConnection(clientSocket);
         
                 client.sendOffset += bytesSent;
                 if (client.sendOffset >= client.sendBuffer.size()) {
@@ -224,19 +220,17 @@ void ServerManager::sendResponse(int clientSocket) {
 
         case COMPLETED: {
             if (client.file.is_open())
-                client.file.close();
+                client.file.close();    
             
             LOG(response.getStatuscode(), client.request);
             if (response.getStatuscode() == 301 || response.getStatuscode() == 201)
                 return closeConnection(clientSocket);
-            
-            if (client.getKeepAlive()) {
+            if (client.shouldKeepAlive()) {
                 client.resetState();
                 client.setState(READING_REQUEST);
                 modifyEpollEvent(clientSocket, EPOLLIN);
-            } else {
-                closeConnection(clientSocket);
             }
+            else { closeConnection(clientSocket); }
             break;
         }
         
@@ -307,10 +301,8 @@ void ServerManager::handleRequest(int clientSocket)
 void ServerManager::handleEvent(const epoll_event& event) {
     int fd = event.data.fd;
     
-    if (event.events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP)) {
-        std::cerr << ERROR << timeStamp() << "ERROR:" << strerror(errno) << "\n" << RESET;
+    if (event.events & (EPOLLERR | EPOLLRDHUP | EPOLLHUP))
         return closeConnection(fd);
-    }
 
     if (event.events & EPOLLIN) {
         if (isListeningSocket(fd))
@@ -318,10 +310,8 @@ void ServerManager::handleEvent(const epoll_event& event) {
         else
             handleRequest(fd);
     }
-    if (event.events & EPOLLOUT) {
+    if (event.events & EPOLLOUT)
         sendResponse(fd);
-
-    }
     
 }
 

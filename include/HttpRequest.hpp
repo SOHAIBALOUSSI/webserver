@@ -58,7 +58,6 @@ class HttpRequest
         size_t    parseHeaders();
         size_t    parseBody();
         size_t    parseChunkedBody();
-        
         std::vector<uint8_t> readLine();
 
     public:
@@ -71,6 +70,7 @@ class HttpRequest
         ~HttpRequest();
 
 
+        bool isCreatFile() const;
         std::string getRequestrouteKey();
         void    setStatusCode(long code) { statusCode = code; }
         std::string getDefaultIndex() { return defaultIndex; }

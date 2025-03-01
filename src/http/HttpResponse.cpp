@@ -173,16 +173,13 @@ void HttpResponse::generateAutoIndex(std::string &path, HttpRequest &request)
             std::string fullPath = path + name;
             struct stat statbuf;
             if (stat(fullPath.c_str(), &statbuf) == 0)
-            {
                 autoIndexContent += "<a href=\"" + name + (S_ISDIR(statbuf.st_mode) ? "/" : "") + "\">" + name + "</a>\n";
-            }
         }
         if (-1 == closedir(dir))
             std::cout << "ERROR: Can't close\n";
     }
 
     autoIndexContent += "</pre><hr></body></html>";
-
     statusCode = 200;
     contentType = "text/html";
     contentLength = autoIndexContent.size();
@@ -442,31 +439,26 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
                                 ? request.getHeaders()["cookie"]
                                 : "";
 
-    std::vector<std::string> envVars;
-    envVars.push_back("REQUEST_METHOD=" + request.getMethod());
-    envVars.push_back("QUERY_STRING=" + queryString);
-    envVars.push_back("CONTENT_LENGTH=" + contentLengthStr);
-    envVars.push_back("CONTENT_TYPE=" + contentTypeStr);
-    envVars.push_back("SCRIPT_NAME=" + request.getOriginalUri());
-    envVars.push_back("SERVER_NAME=" + (!request.getConfig().server_names.empty() 
-        ? request.getConfig().server_names[0] : "localhost"));
+    std::vector<const char *> envVars;
+    envVars.push_back(std::string("REQUEST_METHOD=" + request.getMethod()).data());
+    envVars.push_back(std::string("QUERY_STRING=" + queryString).data());
+    envVars.push_back(std::string("CONTENT_LENGTH=" + contentLengthStr).data());
+    envVars.push_back(std::string("CONTENT_TYPE=" + contentTypeStr).data());
+    envVars.push_back(std::string("SCRIPT_NAME=" + request.getOriginalUri()).data());
+    envVars.push_back(std::string("SERVER_NAME=" + (!request.getConfig().server_names.empty() 
+        ? request.getConfig().server_names[0] : "localhost")).data());
     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
     envVars.push_back("REMOTE_ADDR=127.0.0.1");
     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
     envVars.push_back("REDIRECT_STATUS=200");
-    envVars.push_back("SERVER_PORT=" + portPart);
-    envVars.push_back("SCRIPT_FILENAME=" + uriPath);
-    envVars.push_back("PATH_INFO=" + request.getOriginalUri());
-    envVars.push_back("PATH_TRANSLATED=" + uriPath);
-    envVars.push_back("HTTP_HOST=" + request.getHeaderValue("host"));
-    envVars.push_back("HTTP_COOKIE=" + cookieStr);
+    envVars.push_back(std::string("SERVER_PORT=" + portPart).data());
+    envVars.push_back(std::string("SCRIPT_FILENAME=" + uriPath).data());
+    envVars.push_back(std::string("PATH_INFO=" + request.getOriginalUri()).data());
+    envVars.push_back(std::string("PATH_TRANSLATED=" + uriPath).data());
+    envVars.push_back(std::string("HTTP_HOST=" + request.getHeaderValue("host")).data());
+    envVars.push_back(std::string("HTTP_COOKIE=" + cookieStr).data());
+    envVars.push_back(NULL);
 
-    std::vector<char *> envp;
-    for (std::vector<std::string>::const_iterator envIt = envVars.begin(); envIt != envVars.end(); ++envIt)
-    {
-        envp.push_back(strdup(envIt->c_str()));
-    }
-    envp.push_back(NULL);
     std::string interpreter;
     if (extension == ".php")
     {
@@ -484,21 +476,14 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
     {
         statusCode = 500;
         setErrorPage(request.getConfig().getErrorPages());
-        for (size_t i = 0; i < envp.size(); i++)
-            free(envp[i]);
         return;
     }
-
     int pipe_in[2];
     int pipe_out[2];
     if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1)
     {
         statusCode = 500;
         setErrorPage(request.getConfig().getErrorPages());
-        for (std::vector<char *>::iterator envIt = envp.begin(); envIt != envp.end(); ++envIt)
-        {
-            free(*envIt);
-        }
         return;
     }
 
@@ -508,8 +493,6 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
         std::cerr << "Fork failed\n";
         statusCode = 500;
         setErrorPage(request.getConfig().getErrorPages());
-        for (size_t i = 0; i < envp.size(); i++)
-            free(envp[i]);
         return;
     }
 
@@ -523,7 +506,7 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
         close(pipe_out[1]);
         char *argv[] = {const_cast<char *>(interpreter.c_str()),
                         const_cast<char *>(uriPath.c_str()), NULL};
-        execve(interpreter.c_str(), argv, envp.data());
+        execve(interpreter.c_str(), argv, (char **)(envVars.data()));
         std::cerr << "execve failed\n";
         exit(1);
     }
