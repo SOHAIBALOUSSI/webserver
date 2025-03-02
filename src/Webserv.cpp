@@ -11,8 +11,25 @@ bool validKey(std::string key) {
     }
     return false;
 }
+
 int isspace3(int c) {
     return c == ' ' || c == '\t';
+}
+
+bool hasDirectLoop(std::map<std::string, std::string>& redirections) {
+    std::map<std::string, std::string>::iterator It = redirections.begin();
+    
+    while (It != redirections.end()) {
+        std::string sourceA = It->first;
+        std::string targetB = It->second;
+        
+        std::map<std::string, std::string>::iterator itB = redirections.find(targetB);
+        if (itB != redirections.end() && itB->second == sourceA) {
+            return true;
+        }
+        It++;
+    }
+    return false;
 }
 
 Config parseSeverBlock(std::string& server_block) {
@@ -44,7 +61,12 @@ Config parseSeverBlock(std::string& server_block) {
         else if (key == "max_body_size") { ServerConfig.insertMaxBodySize(value); }
         else if (key == "error_pages") { ServerConfig.insertErrorPages(value); }
         else if (key == "route") { ServerConfig.insertRoute(value); }
+        if (hasDirectLoop(ServerConfig.redirLoopDetector)) {
+            throw std::runtime_error("REDIR LOOP DETECTED: git gud");
+        }
+    
     }
+    
     return ServerConfig;
 }
 
@@ -60,7 +82,6 @@ std::vector<Config> parseConfigFile(std::string configFile) {
         if (end == std::string::npos)
             throw std::runtime_error("missing closing bracket");
         std::string server_block = configFile.substr(start, end - start);
-        // add syntax check later..
         if (server_block.find("[") != std::string::npos)
             throw std::runtime_error("SYNTAX ERROR: nested server block");
         ServerConfig = parseSeverBlock(server_block);

@@ -14,11 +14,10 @@ public:
     std::vector<std::string> server_names;
     std::map<int, std::string> error_pages;
     std::map<std::string, Route> routes; 
-
+    std::map<std::string, std::string> redirLoopDetector;
 public:
     std::string config_content;
     Config();
-    void    printConfig();
     void    parse_config(std::string confing_content);
 
     void    insertPort(std::string value);
@@ -29,6 +28,14 @@ public:
     void    insertErrorPages(std::string value);
     void    insertRoute(std::string value);
 
+    bool    validateRedirCode(std::string statusCode) {
+        if (statusCode == "300" || statusCode == "301" 
+            ||statusCode == "302" || statusCode == "303" 
+            || statusCode == "304" || statusCode == "307"
+            || statusCode == "308")
+            return true;
+        return false;
+    }
     const std::string& getHost( void )  const;
     const std::set<int>& getPorts( void ) const;
     std::map<std::string, Route>& getRoutes() { return routes; }

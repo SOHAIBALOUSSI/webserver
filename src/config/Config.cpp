@@ -193,7 +193,18 @@ void    Config::insertRoute(std::string value) {
                 route.allowed_methods.insert(method);
             }
         }
-        else if (key == "REDIRECT") { route.redirect = value; }
+        else if (key == "REDIRECT") {
+            if (value.find(':') == std::string::npos)
+                throw std::runtime_error("ROUTE ERROR: invalid REDIRECT rule, missing :");
+            
+            route.redirectStatusCode = value.substr(0, value.find(':'));
+            if (!validateRedirCode(route.redirectStatusCode))
+                throw std::runtime_error("ROUTE ERROR: invalid REDIRECT rule, invalid Redirect code");
+            route.redirectUri = value.substr(value.find(':')+1);
+            if (route.redirectUri.empty())
+                throw std::runtime_error("ROUTE ERROR: invalid REDIRECT rule, empty redirection uri");
+            redirLoopDetector[path] = route.redirectUri;
+        }
         else if (key == "DEFAULT_FILE") { route.default_file = value; }
         else if (key == "DIR_LISTING") {
             if (value == "on" || value == "1")
@@ -230,49 +241,6 @@ void    Config::insertRoute(std::string value) {
     }
     routes[path] = route;
 }
-
-void    Config::printConfig() {
-    std::cerr << "SERVER START [" << std::endl;
-    std::cerr << "PORTS: ";
-    for (std::set<int>::iterator it = ports.begin(); it != ports.end(); it++)
-        std::cerr << *it << " ";
-    std::cerr << std::endl;
-    std::cerr << "HOST: " << host << std::endl;
-    std::cerr << "ALLOWED METHODS: ";
-    for (std::set<std::string>::iterator it = allowed_methods.begin(); it != allowed_methods.end(); it++)
-        std::cerr << *it << " ";
-    std::cerr << std::endl;
-    std::cerr << "MAX BODY SIZE: " << max_body_size << std::endl;
-    std::cerr << "SERVER NAMES: ";
-    for (std::vector<std::string>::iterator it = server_names.begin(); it != server_names.end(); it++)
-        std::cerr << *it << " ";
-    std::cerr << std::endl;
-    std::cerr << "ERROR PAGES: ";
-    for (std::map<int, std::string>::iterator it = error_pages.begin(); it != error_pages.end(); it++)
-        std::cerr << it->first << " " << it->second << " ";
-    std::cerr << std::endl;
-    std::cerr << "ROUTES:" << std::endl;
-    for (std::map<std::string, Route>::iterator it = routes.begin(); it != routes.end(); it++) {
-        std::cerr << "ROUTE: [" << it->first << "]\n{" << std::endl;
-        std::cerr << "  ROOT: " << it->second.root << std::endl;
-        std::cerr << "  ALLOWED METHODS: ";
-        for (std::set<std::string>::iterator it2 = it->second.allowed_methods.begin(); it2 != it->second.allowed_methods.end(); it2++)
-            std::cerr << *it2 << " ";
-        std::cerr << std::endl;
-        std::cerr << "  REDIRECT: " << it->second.redirect << std::endl;
-        std::cerr << "  DEFAULT FILE: " << it->second.default_file << std::endl;
-        std::cerr << "  DIR LISTING: " << it->second.dir_listing << std::endl;
-        std::cerr << "  MAX BODY SIZE: " << it->second.max_body_size << std::endl;
-        std::cerr << "  CGI EXTENSIONS: ";
-        for (std::vector<std::string>::iterator it2 = it->second.cgi_extensions.begin(); it2 != it->second.cgi_extensions.end(); it2++)
-            std::cerr << *it2 << " ";
-        std::cerr << std::endl;
-        std::cerr << "  UPLOAD DIR: " << it->second.upload_dir << std::endl;
-        std::cerr << "}" << std::endl;
-    }
-    std::cerr << "] SERVER END"<< std::endl << std::endl;
-}
-
 
 const std::string& Config::getHost( void )  const
 {

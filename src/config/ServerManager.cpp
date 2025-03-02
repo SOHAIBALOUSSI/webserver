@@ -231,6 +231,7 @@ void ServerManager::sendResponse(int clientSocket) {
                 modifyEpollEvent(clientSocket, EPOLLIN);
             }
             else { closeConnection(clientSocket); }
+            // closeConnection(clientSocket); 
             break;
         }
         

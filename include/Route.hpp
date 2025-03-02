@@ -5,10 +5,11 @@
 
 class Route {
 public:
-    std::string root; // a directory or a file from where the file should be searched
+    std::string root;
     std::set<std::string> allowed_methods;
-    std::string redirect;
-    std::string default_file; // default file to answer if the request is a directory
+    std::string redirectUri;
+    std::string redirectStatusCode;
+    std::string default_file; 
     bool dir_listing;
     unsigned long long max_body_size;
     std::vector<std::string> cgi_extensions;

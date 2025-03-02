@@ -126,7 +126,7 @@ std::string HttpResponse::combineHeaders()
        << "Date: " << getCurrentDateHeader() << CRLF
        << "Content-Type: " << contentType << CRLF
        << "Content-Length: " << toString(contentLength) << CRLF
-       << "Server: EnginX" << CRLF
+       << "Server: " << servername << CRLF
        << "Connection: " << Connection << CRLF << CRLF;
     return ss.str();
 }
@@ -216,7 +216,7 @@ void HttpResponse::POST(HttpRequest &request)
         statusCode = 201;
         std::stringstream ss;
         ss << "HTTP/1.1 " << statusCode << " " << statusCodesMap[statusCode] << CRLF
-           << "Server: EnginX" << CRLF
+           << "Server: " << servername << CRLF
            << "Connection: " << Connection << CRLF << CRLF;
         responseHeaders = ss.str();
     }
@@ -230,21 +230,28 @@ void HttpResponse::GET(HttpRequest &request)
 {
     std::string &path = request.getUriPath();
     unsigned code = checkFilePerms(path);
-
+    Route& RouteConf = request.getRouteConf();
     if (isDirectory(path))
     {
-        if (path[path.size() - 1] != '/')
-        {
+        if (path[path.size() - 1] != '/') {
             statusCode = 301;
-            responseHeaders = "HTTP/1.1 301 Moved Permanently\r\nLocation: " + request.getOriginalUri() + "/\r\n\r";
+            responseHeaders = "HTTP/1.1 301 Moved Permanently\r\nLocation: " + request.getOriginalUri() + "/\r\n\r\n";
             responseBody.clear();
             return;
         }
+        if (!RouteConf.redirectUri.empty()) {
+            std::stringstream ss;
+            statusCode = atoull(RouteConf.redirectStatusCode);
+            ss << "HTTP/1.1 " << statusCode << " "
+                << statusCodesMap[statusCode] << CRLF << "Location: "
+                << RouteConf.redirectUri << "\r\n\r\n";
+            responseHeaders = ss.str();
+            responseBody.clear();
+            return ;
+        }
 
-        std::set<std::string> &methods = request.getRouteConf().getAllowedMethods();
-
-        if (methods.count(request.getMethod()) == 0)
-        {
+        std::set<std::string> &methods = RouteConf.getAllowedMethods();
+        if (methods.count(request.getMethod()) == 0) {
             statusCode = 405;
             setErrorPage(request.getConfig().getErrorPages());
             return;
@@ -271,12 +278,10 @@ void HttpResponse::GET(HttpRequest &request)
         return;
     }
 
-    if (code == 200)
-    {
+    if (code == 200) {
         prepareHeaders(path);
     }
-    else
-    {
+    else {
         setErrorPage(request.getConfig().getErrorPages());
     }
 }
@@ -299,35 +304,29 @@ void HttpResponse::setErrorPage(std::map<int, std::string> &ErrPages)
         std::string errPagePath = ErrPage->second;
         contentType = getContentType(errPagePath);
         contentLength = getFileContentLength(errPagePath);
-        if (contentLength == -1)
-        {
+        if (contentLength == -1){
             statusCode = 500;
         }
         responseHeaders = combineHeaders();
         unsigned code = checkFilePerms(errPagePath);
-        if (code == 200)
-        {
+        if (code == 200) {
             std::ifstream errfile(errPagePath.c_str(), std::ios::binary);
             errfile.read(buffer, 4096);
             std::streamsize bytesRead = errfile.gcount();
-            if (bytesRead > 0)
-            {
+            if (bytesRead > 0) {
                 responseBody.append(buffer, bytesRead);
             }
-            else if (errfile.eof() && responseBody.empty())
-            {
+            else if (errfile.eof() && responseBody.empty()) {
                 errfile.close();
             }
         }
-        else
-        {
+        else {
             responseBody = generateErrorPage(statusCode);
             contentLength = responseBody.size();
             responseHeaders = combineHeaders();
         }
     }
-    else
-    {
+    else {
         responseBody = generateErrorPage(statusCode);
         contentLength = responseBody.size();
         responseHeaders = combineHeaders();
@@ -339,29 +338,25 @@ void HttpResponse::DELETE(HttpRequest &request)
 {
     if (statusCode == 200)
     {
-        if (isDirectory(requestedContent) || requestedContent.find(request.getUploadDir()) != 0)
-        {
+        if (isDirectory(requestedContent) || requestedContent.find(request.getUploadDir()) != 0) {
             statusCode = 403;
             setErrorPage(request.getConfig().getErrorPages());
             return;
         }
-        if (remove(requestedContent.c_str()) != 0)
-        {
+        if (remove(requestedContent.c_str()) != 0) {
             statusCode = 500;
             setErrorPage(request.getConfig().getErrorPages());
         }
-        else
-        {
+        else {
             statusCode = 204;
             std::stringstream ss;
             ss << "HTTP/1.1 " << statusCode << " " << statusCodesMap[statusCode] << CRLF
-               << "Server: EnginX" << CRLF
+               << "Server: " << servername << CRLF
                << "Connection: " << Connection << CRLF << CRLF;
             responseHeaders = ss.str();
         }
     }
-    else
-    {
+    else {
         setErrorPage(request.getConfig().getErrorPages());
     }
 }
@@ -599,7 +594,7 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
                           "Date: " + Date + "\r\n" +
                           "Content-Type: " + contentType + "\r\n" +
                           "Content-Length: " + toString(contentLength) + "\r\n" +
-                          "Server: EnginX\r\n" +
+                          "Server: "+ servername + "\r\n" +
                           "Connection: " + Connection + "\r\n";
         std::vector<std::string>::const_iterator cookieIt = setCookieHeaders.begin();
         for (; cookieIt != setCookieHeaders.end(); ++cookieIt)
@@ -618,7 +613,7 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
 void HttpResponse::generateResponse(HttpRequest &request)
 {
     statusCode = request.getStatusCode();
-
+    servername = request.getServerName();
     Config &conf = request.getConfig();
     requestedContent = request.getUriPath();
     Connection = request.getHeaderValue("Connection") == "close" ? "close" : "keep-alive";

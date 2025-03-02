@@ -103,7 +103,6 @@ void HttpRequest::reset()
     headers.clear();
     RequestrouteKey.clear();
     isChunked = false;
-    // routeConf = Route();
     keepAlive = true;
     _pos = 0;
     autoIndex = false;
@@ -130,13 +129,13 @@ void HttpRequest::RouteURI()
     if (!routeKey.empty())
     {
         routeConf = routesMap[routeKey];
-        RequestrouteKey = routeKey; // 7di m3a hada latmes7o!!!!!!!!!!!! checki 7ta lheader dyal request
+        RequestrouteKey = routeKey; 
         defaultIndex = routeConf.getDefaultFile();
         autoIndex = routeConf.getAutoIndexState();
         if (routeKey == "/")
         {
             if (size_t pos = uriPath.find('/') != std::string::npos)
-                uriPath.replace(pos - 1, 1, routeConf.getRoot() + "/"); // back to it later
+                uriPath.replace(pos - 1, 1, routeConf.getRoot() + "/");
         }
         else
         {
@@ -214,7 +213,7 @@ std::map<std::string, std::string> HttpRequest::decodeAndParseQuery(std::string 
         value = (pos != std::string::npos ? queryParam.substr(pos + 1) : "");
         if (value.find('#') != std::string::npos)
             value.erase(value.find('#'));
-        queryParams[decode(key)] = decode(value); // decode this
+        queryParams[decode(key)] = decode(value); 
     }
     return (queryParams);
 }
@@ -399,7 +398,6 @@ size_t HttpRequest::parseBody()
     return (_pos - startPos);
 }
 
-// still not tested with partial chunked requests
 size_t HttpRequest::parseChunkedBody()
 {
     size_t startPos = _pos;

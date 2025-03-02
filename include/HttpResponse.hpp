@@ -24,7 +24,7 @@ private:
     std::string contentType;
     long      contentLength;
     std::string Date;
-    std::string Server;
+    std::string servername;
     std::string Connection;
     std::string extension;
     void generateStatusCodes();
@@ -51,6 +51,7 @@ public:
 
     void    reset();
     // getters
+    
     long    getStatuscode() { return statusCode; }
     std::string& getResponseHeaders() { return responseHeaders; }
     std::string& getResponseBody() { return responseBody;}
