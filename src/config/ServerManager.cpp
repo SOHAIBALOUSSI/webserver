@@ -164,8 +164,7 @@ void ServerManager::sendResponse(int clientSocket) {
     
     switch (client.getClientState()) {
         case GENERATING_RESPONSE: {
-            
-            if (response.getStatuscode() < 400 && response.getResponseBody().empty()) {
+            if (response.getStatuscode() < 400 && response.getResponseBody().empty() && response.getStatuscode() != 204) {
                 client.file.open(client.getRequest().getUriPath().c_str(), std::ios::binary);
                 if (!client.file.is_open()) {
                     client.setState(COMPLETED);
@@ -191,9 +190,8 @@ void ServerManager::sendResponse(int clientSocket) {
                                         client.sendBuffer.c_str() + client.sendOffset, 
                                         client.sendBuffer.size() - client.sendOffset, 
                                         MSG_NOSIGNAL);
-                if (bytesSent < 0)
+                if (bytesSent <= 0)
                     return closeConnection(clientSocket);
-        
                 client.sendOffset += bytesSent;
                 if (client.sendOffset >= client.sendBuffer.size()) {
                     client.sendBuffer.clear();
@@ -231,7 +229,6 @@ void ServerManager::sendResponse(int clientSocket) {
                 modifyEpollEvent(clientSocket, EPOLLIN);
             }
             else { closeConnection(clientSocket); }
-            // closeConnection(clientSocket); 
             break;
         }
         
@@ -263,18 +260,12 @@ void ServerManager::readRequest(Client& Client) {
     int clientFd = Client.getFd();
     HttpRequest& request = Client.getRequest();
     bytesReceived = recv(clientFd, buffer, READ_BUFFER_SIZE, 0);
-    if (bytesReceived == -1) {
-        std::clog << ERROR << timeStamp()<< "ERROR: receiving data in client socket N" << clientFd << "\n" << RESET;
-        return closeConnection(clientFd);
-    }
-    else if (bytesReceived == 0)
+    if (bytesReceived <= 0)
         return closeConnection(clientFd);
 
     std::vector<uint8_t>& requestBuffer = request.getRequestBuffer();
     requestBuffer.insert(requestBuffer.end(), buffer, buffer + bytesReceived);
     bytesReceived = request.parse(requestBuffer.data(), requestBuffer.size());
-    // if (bytesReceived > 0)
-    //     requestBuffer.erase(requestBuffer.begin(), requestBuffer.begin() + bytesReceived);
 }
 
 void ServerManager::handleRequest(int clientSocket)
@@ -286,6 +277,7 @@ void ServerManager::handleRequest(int clientSocket)
     HttpRequest& request = client.getRequest();
     HttpResponse& response = client.getResponse();
 
+    It->second.setLastActivity(time(NULL));
     if (client.getClientState() == READING_REQUEST) {
         readRequest(client);
         if (request.getState() == COMPLETE) {
@@ -295,7 +287,6 @@ void ServerManager::handleRequest(int clientSocket)
             modifyEpollEvent(clientSocket, EPOLLOUT);
         }
     }
-    It->second.setLastActivity(time(NULL));
 }
 
 
@@ -359,7 +350,7 @@ void  ServerManager::initServers()
         try {    
             Server* server = new Server(serverPool[i]);
             std::clog << INFO << timeStamp() << "INFO: Setting & starting up server :\n" << RESET << "   -host: " << serverPool[i].getHost() << "\n";
-            std::set<int>::const_iterator port =  serverPool[i].getPorts().begin();
+            std::vector<int>::const_iterator port =  serverPool[i].getPorts().begin();
             while (port != serverPool[i].getPorts().end()) {
                 std::clog << "   -port: " << *port;
                 ++port;

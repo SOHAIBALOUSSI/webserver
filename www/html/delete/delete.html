@@ -64,9 +64,14 @@
                     responseMessage.textContent = `File ${filename} is deleted successfully.`
                     if (response.status >= 400)
                     {
-                        responseMessage.textContent = "Error2: " + response.statusText;
+                        responseMessage.textContent = "Error: " + response.statusText;
                         responseMessage.style.color = "red";
                     }
+                    document.getElementById("filename").value = "";
+                })
+                .catch(err =>{
+                    console.log(err);
+                    document.getElementById("filename").value = "";
                 })
         });
     </script>

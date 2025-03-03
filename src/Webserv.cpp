@@ -40,7 +40,7 @@ Config parseSeverBlock(std::string& server_block) {
     std::istringstream tokenStream(server_block);
     while (std::getline(tokenStream, token, '\n')) {
         if (token.empty()) continue;
-    
+
         size_t pos = token.find("=");
         if (pos == std::string::npos)
             throw std::runtime_error("SYNTAX ERROR: missing = in configuration");
@@ -64,9 +64,11 @@ Config parseSeverBlock(std::string& server_block) {
         if (hasDirectLoop(ServerConfig.redirLoopDetector)) {
             throw std::runtime_error("REDIR LOOP DETECTED: git gud");
         }
-    
+
     }
-    
+    if (ServerConfig.ports.empty()) throw std::runtime_error("ERROR: NO PORTS PROVIDED");
+    if (ServerConfig.host.empty()) throw std::runtime_error("ERROR: NO HOST PROVIDED");
+    if (ServerConfig.ports.empty()) throw std::runtime_error("ERROR: NO PORTS PROVIDED");
     return ServerConfig;
 }
 

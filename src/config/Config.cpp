@@ -32,7 +32,10 @@ void    Config::insertPort(std::string value) {
         port = atoull(portValue);
         if (port < 1024 || port > 65535)
             throw std::runtime_error("PORT ERROR: cannot bind to this port number");
-        ports.insert(port);
+        if ((std::find(ports.begin(), ports.end(), port)) != ports.end()) {
+            throw std::runtime_error("PORT ERROR");
+        }
+        ports.push_back(port);
     }
 }
 
@@ -247,7 +250,7 @@ const std::string& Config::getHost( void )  const
     return (host);
 }
 
-const std::set<int>& Config::getPorts( void ) const
+const std::vector<int>& Config::getPorts( void ) const
 {
     return (ports);
 }

@@ -88,16 +88,7 @@ std::string getContentType(std::string path)
     return "application/octet-stream";
 }
 
-unsigned checkFilePerms(std::string &path)
-{
-    if (access(path.c_str(), F_OK) == 0)
-    {
-        if (access(path.c_str(), R_OK) != 0)
-            return 403;
-        return 200;
-    }
-    return 404;
-}
+
 
 long getFileContentLength(std::string &path)
 {
@@ -164,6 +155,16 @@ bool isDirectory(const std::string &path)
     return S_ISDIR(statbuf.st_mode);
 }
 
+unsigned checkFilePerms(std::string &path)
+{
+    if (access(path.c_str(), F_OK) == 0)
+    {
+        if (access(path.c_str(), R_OK) != 0)
+            return 403;
+        return 200;
+    }
+    return 404;
+}
 void HttpResponse::generateAutoIndex(std::string &path, HttpRequest &request)
 {
     std::string autoIndexContent = "<html><head><title>Index of " + path + "</title></head><body>";
@@ -205,9 +206,11 @@ void HttpResponse::generateAutoIndex(std::string &path, HttpRequest &request)
 
 void HttpResponse::POST(HttpRequest &request)
 {
-    if (request.getHeaders().count("content-type") && !request.isImplemented(request.getHeaders()["content-type"]))
-    {
-        statusCode = 501;
+    Route& RouteConf = request.getRouteConf();
+
+    std::set<std::string> &methods = RouteConf.getAllowedMethods();
+    if (methods.count(request.getMethod()) == 0) {
+        statusCode = 405;
         setErrorPage(request.getConfig().getErrorPages());
         return;
     }
@@ -231,6 +234,13 @@ void HttpResponse::GET(HttpRequest &request)
     std::string &path = request.getUriPath();
     unsigned code = checkFilePerms(path);
     Route& RouteConf = request.getRouteConf();
+
+    std::set<std::string> &methods = RouteConf.getAllowedMethods();
+    if (methods.count(request.getMethod()) == 0) {
+        statusCode = 405;
+        setErrorPage(request.getConfig().getErrorPages());
+        return;
+    }
     if (isDirectory(path))
     {
         if (path[path.size() - 1] != '/') {
@@ -249,16 +259,10 @@ void HttpResponse::GET(HttpRequest &request)
             responseBody.clear();
             return ;
         }
-
-        std::set<std::string> &methods = RouteConf.getAllowedMethods();
-        if (methods.count(request.getMethod()) == 0) {
-            statusCode = 405;
-            setErrorPage(request.getConfig().getErrorPages());
-            return;
-        }
         std::string defaultFile = request.getDefaultIndex();
         std::string pathToIndex = path + defaultFile;
-        if (!defaultFile.empty() && checkFilePerms(pathToIndex) == 200)
+        unsigned code = checkFilePerms(pathToIndex);
+        if (!defaultFile.empty() && code == 200)
         {
             request.setURIpath(pathToIndex);
             prepareHeaders(request.getUriPath());
@@ -271,7 +275,7 @@ void HttpResponse::GET(HttpRequest &request)
             }
             else
             {
-                statusCode = 403;
+                statusCode = code;
                 setErrorPage(request.getConfig().getErrorPages());
             }
         }
@@ -336,6 +340,13 @@ void HttpResponse::setErrorPage(std::map<int, std::string> &ErrPages)
 
 void HttpResponse::DELETE(HttpRequest &request)
 {
+    Route& RouteConf = request.getRouteConf();
+    std::set<std::string> &methods = RouteConf.getAllowedMethods();
+    if (methods.count(request.getMethod()) == 0) {
+        statusCode = 405;
+        setErrorPage(request.getConfig().getErrorPages());
+        return;
+    }
     if (statusCode == 200)
     {
         if (isDirectory(requestedContent) || requestedContent.find(request.getUploadDir()) != 0) {
@@ -348,12 +359,14 @@ void HttpResponse::DELETE(HttpRequest &request)
             setErrorPage(request.getConfig().getErrorPages());
         }
         else {
+            std::cout << "generate delete resp\n";
             statusCode = 204;
             std::stringstream ss;
             ss << "HTTP/1.1 " << statusCode << " " << statusCodesMap[statusCode] << CRLF
                << "Server: " << servername << CRLF
                << "Connection: " << Connection << CRLF << CRLF;
             responseHeaders = ss.str();
+            responseBody.clear();
         }
     }
     else {
@@ -400,6 +413,7 @@ bool HttpResponse::isCgiScript(HttpRequest &request)
     }
     return false;
 }
+
 
 void HttpResponse::handleCgiScript(HttpRequest &request)
 {
@@ -530,14 +544,21 @@ void HttpResponse::handleCgiScript(HttpRequest &request)
     }
     close(pipe_in[1]);
 
-    char buffer[READ_BUFFER_SIZE];
+    char buffer[1024];
     std::string cgiOutput;
     ssize_t bytesRead;
-    while ((bytesRead = read(pipe_out[0], buffer, READ_BUFFER_SIZE - 1)) > 0)
-    {
+    time_t start_time = time(NULL);
+    time_t max_wait = 1;
+
+    while ((bytesRead = read(pipe_out[0], buffer, 1024 - 1)) > 0) {
         buffer[bytesRead] = '\0';
         cgiOutput += buffer;
+        if (time(NULL) - start_time >= max_wait) {
+            kill(pid, SIGKILL);
+            break;
+        }
     }
+
     if (bytesRead < 0)
         std::cerr << "Read from CGI failed \n";
     close(pipe_out[0]);

@@ -94,8 +94,11 @@ class HttpRequest
         void  setBodyStartPos(size_t value) { bodyStart = value; }
         std::vector<uint8_t>& getRequestBuffer() { return request; }
         std::string getServerName() {
-            return configs.server_names.at(0);
+            if (!configs.server_names.empty())
+                return configs.server_names.at(0);
+            return "enginx.ma";
         }
+
         //main parsing
         size_t    parse(const uint8_t *buffer, size_t bufferLen);
         std::string getLineAsString(const std::vector<uint8_t>& line);      

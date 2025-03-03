@@ -1,7 +1,7 @@
 CXX = c++
-CXXFLAGS = -Ofast -g3 -Wall -Wextra -Werror -std=c++98 
+CXXFLAGS = -Ofast -Wall -Wextra -Werror -std=c++98 
 
-NAME = server
+NAME = webserv
 
 SRCS = src/http/HttpRequest.cpp src/config/Server.cpp src/Common.cpp src/config/Socket.cpp \
 		src/config/Config.cpp src/Route.cpp src/Webserv.cpp src/config/ServerManager.cpp \

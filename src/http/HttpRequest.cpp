@@ -132,16 +132,18 @@ void HttpRequest::RouteURI()
         RequestrouteKey = routeKey; 
         defaultIndex = routeConf.getDefaultFile();
         autoIndex = routeConf.getAutoIndexState();
+        std::string ROUTE = (routeConf.getRoot());
+        if (ROUTE.find("..") != std::string::npos) throw 403;
         if (routeKey == "/")
         {
             if (size_t pos = uriPath.find('/') != std::string::npos)
-                uriPath.replace(pos - 1, 1, routeConf.getRoot() + "/");
+                uriPath.replace(pos - 1, 1, ROUTE + "/");
         }
         else
         {
             if (size_t pos = uriPath.find(routeKey) != std::string::npos)
             {
-                uriPath.replace(pos - 1, routeKey.size(), routeConf.getRoot());
+                uriPath.replace(pos - 1, routeKey.size(), ROUTE);
             }
         }
     }
@@ -302,8 +304,6 @@ void HttpRequest::validateVersion()
         throw 505;
 }
 
-// header-field   = field-name ":" OWS field-value OWS
-
 size_t HttpRequest::parseHeaders()
 {
     size_t startPos = _pos;
@@ -330,12 +330,6 @@ size_t HttpRequest::parseHeaders()
     isChunked = transferEncodingFound && toLowerCase(headers["transfer-encoding"]) == "chunked";
     if (isChunked && headers.count("content-length")) { throw 400; }
     if (method == "POST" && !isChunked && !headers.count("content-length")) { throw 400; }
-
-    std::set<std::string> AllowedMethods = getConfig().allowed_methods; // check if server block allow a method
-    if (AllowedMethods.find(method) == AllowedMethods.end())
-    {
-        throw 405;
-    }
     if (headers.count("host") == 0)
     {
         throw 400;
@@ -370,6 +364,10 @@ size_t HttpRequest::parseBody()
 {
     size_t startPos = _pos;
 
+    std::set<std::string> &methods = routeConf.getAllowedMethods();
+    if (methods.count(method) == 0) {
+       throw 405;
+    }
     if (isChunked)
     {
         return parseChunkedBody();
@@ -503,6 +501,7 @@ std::pair<std::string, std::string> HttpRequest::splitKeyValue(const std::string
 bool HttpRequest::isImplemented(std::string str) {
     if (str.find("multipart/form-data") != std::string::npos) return false;
     if (str.find("x-www-form-urlencoded") != std::string::npos) return false;
+    (void)str;
     return true;
 }
 

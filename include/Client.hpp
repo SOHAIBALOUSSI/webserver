@@ -5,7 +5,6 @@
 #include "HttpResponse.hpp"
 #include "Config.hpp"
 
-#define KEEP_ALIVE_TIMEOUT 5
 
 enum ClientState {
     READING_REQUEST,

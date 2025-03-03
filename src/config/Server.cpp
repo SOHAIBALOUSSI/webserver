@@ -4,12 +4,13 @@
 Server::Server(const Config& serverConfig)
 {
     this->serverConfig = serverConfig;
-    std::set<int>::const_iterator it = serverConfig.ports.begin();
+    std::vector<int>::const_iterator it = serverConfig.ports.begin();
     while (it != serverConfig.ports.end())
     {
+        Socket* serverSocket;
         try
         {
-            Socket* serverSocket = new Socket;
+            serverSocket = new Socket;
             serverSocket->create();
             sockaddr_in serverAddr;
             serverAddr.sin_family = AF_INET;
@@ -21,6 +22,7 @@ Server::Server(const Config& serverConfig)
         }
         catch(const std::exception& e)
         {
+            delete serverSocket;
             std::cerr << ERROR << timeStamp() << "ERROR:  setting up server on port " << *it << ": " << e.what()  << RESET << std::endl;
         }
         ++it;
