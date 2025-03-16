@@ -7,7 +7,7 @@ This is our http webserver, we built a lightweight HTTP server from scratch that
 - HTTP protocol implementation
 
 # How this cool webserver work :D
-- clone the repo <b>(obviously)<b>
+- clone the repo <b>(obviously)</b>
 - compile the source code using 'make'
 - run ```./webserver webserv.conf```
 - here is how you can define the configuration file:
